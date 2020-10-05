@@ -29,6 +29,14 @@ def get_dataset(arg):
     :param arg:
     :return:
     '''
+
+    def get_return_format(train, test, classes, name):
+        return {
+            "train_set": train,
+            "test_set": test,
+            "classes": classes,
+            "name": name
+        }
     transform = get_normalization()
 
     if arg.lower() == "cifar10":
@@ -36,13 +44,12 @@ def get_dataset(arg):
         train = torchvision.datasets.CIFAR10(root='./Data', train=True, download=True, transform=transform)
         test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform=transform)
         classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+        return get_return_format(train, test, classes, "CIFAR10")
 
-        return {
-                "train_set": train,
-                "test_set": test,
-                "classes": classes,
-                "name": "CIFAR10"
-                }
+    elif args.lower() == "cifar100":
+        train = torchvision.datasets.CIFAR100(root='./Data', train=True, download=True, transform=transform)
+        test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform=transform)
+        return get_return_format(train, test, None, "CIFAR100")
 
     return None
 

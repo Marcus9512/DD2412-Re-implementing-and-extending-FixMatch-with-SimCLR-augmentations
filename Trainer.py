@@ -13,7 +13,7 @@ LOGGER_NAME = "Trainer"
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function, batch_size=10, use_gpu=True, workers=2):
+    def __init__(self, dataset, loss_function, batch_size=10, mu=5, use_gpu=True, workers=2):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -26,6 +26,7 @@ class Trainer:
         logging.basicConfig(level=logging.INFO)
         logger = logging.getLogger(LOGGER_NAME)
 
+        self.mu = mu
         self.logger = logger
         self.dataset = dataset
         self.batch_size = batch_size
@@ -73,14 +74,29 @@ class Trainer:
                 "Could not find pycuda and thus not show amazing stats about youre GPU, have you installed CUDA?")
             pass
 
-    def split_train_dataset(self, percent_to_validation):
-        assert percent_to_validation < 1.0
-        assert percent_to_validation > 0
+    def split_dataset(self, dataset, percent_to_set2):
+        assert percent_to_set2 < 1.0
+        assert percent_to_set2 > 0
 
-        size_of_dataset = len(self.dataset["train_set"])
-        train, val = ut.random_split(self.dataset["train_set"], [int((1.0 - percent_to_validation)*size_of_dataset),
-                                                                 int(percent_to_validation*size_of_dataset)])
-        return train, val
+        size_of_dataset = len(dataset)
+        length_set1 = int((1.0 - percent_to_set2)*size_of_dataset)
+        length_set2 = int(percent_to_set2*size_of_dataset)
+
+        # compensate for integer division
+        length_set2 = length_set2 if (length_set1 + length_set2) == len(dataset) else length_set2+1
+
+        set1, set2 = ut.random_split(dataset, [length_set1, length_set2])
+        return set1, set2
+
+    def create_custom_dataloder(self, label, unlabeled):
+        label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, shuffle=True,
+                                         num_workers=self.workers, pin_memory=True)
+        unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size*self.mu, shuffle=True,
+                                         num_workers=self.workers, pin_memory=True)
+
+        self.logger.info(f"Labeled {len(label_dataloader)}, Unlabeled {len(unlabeled_dataloader)}")
+        assert len(label_dataloader) == len(unlabeled_dataloader)
+        return zip(label_dataloader, unlabeled_dataloader)
 
     def validate_directory(self, save_path):
         '''
@@ -137,11 +153,13 @@ class Trainer:
         # set model to GPU or CPU
         model.to(self.main_device)
 
-        train, val = self.split_train_dataset(percent_to_validation)
+        # split dataset to validation and train, then split train to labeled / unlabeled
+        train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
+        # Math solves everything right, self.mu*((len(train) / (1+self.mu)) / len(train))
+        labeled, unlabeled = self.split_dataset(train, self.mu*((len(train) / (1+self.mu)) / len(train)))
 
         # Create dataloders for each part of the dataset
-        train_dataloader = ut.DataLoader(train, batch_size=self.batch_size, shuffle=True,
-                                         num_workers=self.workers, pin_memory=True)
+        train_dataloader = self.create_custom_dataloder(labeled, unlabeled)
         val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
                                        num_workers=self.workers, pin_memory=True)
 
@@ -164,21 +182,26 @@ class Trainer:
 
                 combined_loss = 0
                 i = 0
-                for data in current_dataloder:
-                    sample, label = data
+                for _, (X, U) in enumerate(current_dataloder):
+                    #print(X.shape())
+                    sampleX, label = X
+                    print(label)
+                    sampleU, label2= U
+                    print(label2)
 
                     # Send sample and label to GPU or CPU
-                    sample = sample.to(device=self.main_device)
+                    sampleX = sampleX.to(device=self.main_device)
+                    sampleU = sampleX.to(device=self.main_device)
                     label = label.to(device=self.main_device)
 
                     if session == "training":
                         # Reset gradients between training
                         optimizer.zero_grad()
-                        out = model(sample)
+                        out = model(sampleX)
                     else:
                         # Disable gradient modifications
                         with torch.no_grad():
-                            out = model(sample)
+                            out = model(sampleX)
 
                     # Calculate loss
                     loss = criterion(out, label)
@@ -192,7 +215,7 @@ class Trainer:
                     if (i % 1000 == 0):
                         self.logger.info(f"{session} img: {i}")
                     i += 1
-                combined_loss /= len(current_dataloder)
+                combined_loss /= i
                 self.logger.info(f"{session} loss: {combined_loss}")
                 self.summary.add_scalar('Loss/' + session, combined_loss, e)
 
