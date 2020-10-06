@@ -7,13 +7,14 @@ import torch.utils.tensorboard as tb
 
 from os import path
 from datetime import datetime
+from Custom_dataset import Labeled_Unlabeled_dataset as lu
 
 LOGGER_NAME = "Trainer"
 
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function, batch_size=10, mu=5, use_gpu=True, workers=2):
+    def __init__(self, dataset, loss_function, batch_size=2, mu=5, use_gpu=True, workers=0):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -89,14 +90,17 @@ class Trainer:
         return set1, set2
 
     def create_custom_dataloder(self, label, unlabeled):
-        label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, shuffle=True,
-                                         num_workers=self.workers, pin_memory=True)
-        unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size*self.mu, shuffle=True,
-                                         num_workers=self.workers, pin_memory=True)
+        '''
+        Creates a custom dataset of label and unlabeled
+        :param label:
+        :param unlabeled:
+        :return:
+        '''
+        # This is a custom dataset located in the file Labeled_Unlabeled_dataset.py
+        l_u_dataset = lu.L_U_Dataset(label, unlabeled, self.mu)
 
-        self.logger.info(f"Labeled {len(label_dataloader)}, Unlabeled {len(unlabeled_dataloader)}")
-        assert len(label_dataloader) == len(unlabeled_dataloader)
-        return zip(label_dataloader, unlabeled_dataloader)
+        return ut.DataLoader(l_u_dataset, batch_size=self.batch_size, shuffle=True,
+                                         num_workers=self.workers, pin_memory=True)
 
     def validate_directory(self, save_path):
         '''
@@ -155,7 +159,8 @@ class Trainer:
 
         # split dataset to validation and train, then split train to labeled / unlabeled
         train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
-        # Math solves everything right, self.mu*((len(train) / (1+self.mu)) / len(train))
+        # Math solves everything right?, self.mu*((len(train) / (1+self.mu)) / len(train))
+        # The formula represents the percent amount of data to unlabeled data
         labeled, unlabeled = self.split_dataset(train, self.mu*((len(train) / (1+self.mu)) / len(train)))
 
         # Create dataloders for each part of the dataset
@@ -183,28 +188,42 @@ class Trainer:
                 combined_loss = 0
                 i = 0
                 for _, (X, U) in enumerate(current_dataloder):
-                    #print(X.shape())
-                    sampleX, label = X
-                    print(label)
-                    sampleU, label2= U
-                    print(label2)
+
+                    if session == "training":
+                        sampleX, label = X
+                        sampleU = U
+                        # Send unlabeled sample to GPU or CPU
+                        sampleU = sampleU.to(device=self.main_device)
+                    else:
+                        # Verification have no unlabeled dataset
+                        sampleX, label = (X, U)
 
                     # Send sample and label to GPU or CPU
                     sampleX = sampleX.to(device=self.main_device)
-                    sampleU = sampleX.to(device=self.main_device)
+
                     label = label.to(device=self.main_device)
 
                     if session == "training":
                         # Reset gradients between training
                         optimizer.zero_grad()
                         out = model(sampleX)
+                        '''
+                        TODO
+                        You can use SampleU as the unlabeled dataset and SampleX as the labeled. Note
+                        that SampleU & SampleX is in tensorfromat
+                        '''
+                        loss = criterion(out, label)
                     else:
                         # Disable gradient modifications
                         with torch.no_grad():
                             out = model(sampleX)
+                            '''
+                            TODO
+                            Should we have another loss function here
+                            '''
+                            loss = criterion(out, label)
 
-                    # Calculate loss
-                    loss = criterion(out, label)
+
                     combined_loss += loss.item()
 
                     if session == "training":
@@ -214,7 +233,9 @@ class Trainer:
 
                     if (i % 1000 == 0):
                         self.logger.info(f"{session} img: {i}")
-                    i += 1
+
+                    i += label.size(0)
+
                 combined_loss /= i
                 self.logger.info(f"{session} loss: {combined_loss}")
                 self.summary.add_scalar('Loss/' + session, combined_loss, e)
@@ -222,6 +243,12 @@ class Trainer:
         return self.save_network(model)
 
     def test(self, save_path, model):
+        '''
+        A test method that loads the network provided in save_path to the model in "model".
+        :param save_path:
+        :param model:
+        :return:
+        '''
         test_dataloader = ut.DataLoader(self.dataset["test_set"], batch_size=self.batch_size, shuffle=True,
                                         num_workers=self.workers, pin_memory=True)
 
@@ -246,3 +273,17 @@ class Trainer:
                 number_of_testdata += label.size(0)
 
         self.logger.info(f"Accuracy: {(correct / number_of_testdata) * 100}")
+
+
+'''
+Code graveyard
+
+    label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, shuffle=True,
+                                                num_workers=self.workers, pin_memory=True)
+    unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size*self.mu, shuffle=True,
+                                                num_workers=self.workers, pin_memory=True)
+    
+    self.logger.info(f"Labeled {len(label_dataloader)}, Unlabeled {len(unlabeled_dataloader)}")
+    assert len(label_dataloader) == len(unlabeled_dataloader)
+    return zip(label_dataloader, unlabeled_dataloader)
+'''
