@@ -45,7 +45,7 @@ def get_dataset(arg):
         classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
         return get_return_format(train, test, classes, "CIFAR10")
 
-    elif args.lower() == "cifar100":
+    elif arg.lower() == "cifar100":
         train = torchvision.datasets.CIFAR100(root='./Data', train=True, download=True, transform=transform)
         test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform=transform)
         return get_return_format(train, test, None, "CIFAR100")
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     model = torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=False, num_classes=10)
     loss_function = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset, loss_function)
+    trainer = Trainer(dataset, loss_function, batch_size=10)
     path = trainer.train(model, learn_rate=0.1, weight_decay=1e-9, momentum=1e-9, epochs=5)
     trainer.test(path, model)
     trainer.close_summary()

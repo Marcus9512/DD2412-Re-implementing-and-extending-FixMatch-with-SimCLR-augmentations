@@ -14,7 +14,7 @@ LOGGER_NAME = "Trainer"
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function, batch_size=2, mu=5, use_gpu=True, workers=0):
+    def __init__(self, dataset, loss_function, batch_size=10, mu=5, use_gpu=True, workers=0):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -142,6 +142,16 @@ class Trainer:
         self.summary.flush()
         self.summary.close()
 
+    def log_information(self, learn_rate, weight_decay, momentum, epochs, percent_to_validation):
+        self.logger.info(f"---------------Training model---------------")
+        self.logger.info(f"\t Batch size:\t\t{self.batch_size}")
+        self.logger.info(f"\t Mu:\t\t\t{self.mu}")
+        self.logger.info(f"\t Learn rate:\t\t{learn_rate}")
+        self.logger.info(f"\t Weight decay:\t\t{weight_decay}")
+        self.logger.info(f"\t Momentum:\t\t{momentum}")
+        self.logger.info(f"\t Epochs:\t\t{epochs}")
+        self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
+
     def train(self, model, learn_rate, weight_decay, momentum, epochs=10, percent_to_validation=0.2):
         '''
 
@@ -154,6 +164,9 @@ class Trainer:
         :param percent_to_validation:
         :return: a path of the saved model
         '''
+
+        self.log_information(learn_rate, weight_decay, momentum, epochs, percent_to_validation)
+
         # set model to GPU or CPU
         model.to(self.main_device)
 
@@ -190,23 +203,23 @@ class Trainer:
                 for _, (X, U) in enumerate(current_dataloder):
 
                     if session == "training":
-                        sampleX, label = X
-                        sampleU = U
+                        batch_X, label = X
+                        batch_U = U
                         # Send unlabeled sample to GPU or CPU
-                        sampleU = sampleU.to(device=self.main_device)
+                        batch_U = batch_U.to(device=self.main_device)
                     else:
                         # Verification have no unlabeled dataset
-                        sampleX, label = (X, U)
+                        batch_X, label = (X, U)
 
                     # Send sample and label to GPU or CPU
-                    sampleX = sampleX.to(device=self.main_device)
+                    batch_X = batch_X.to(device=self.main_device)
 
                     label = label.to(device=self.main_device)
 
                     if session == "training":
                         # Reset gradients between training
                         optimizer.zero_grad()
-                        out = model(sampleX)
+                        out = model(batch_X)
                         '''
                         TODO
                         You can use SampleU as the unlabeled dataset and SampleX as the labeled. Note
@@ -216,7 +229,7 @@ class Trainer:
                     else:
                         # Disable gradient modifications
                         with torch.no_grad():
-                            out = model(sampleX)
+                            out = model(batch_X)
                             '''
                             TODO
                             Should we have another loss function here
