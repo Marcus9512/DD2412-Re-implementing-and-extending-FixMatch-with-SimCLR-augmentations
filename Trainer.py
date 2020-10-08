@@ -14,7 +14,7 @@ LOGGER_NAME = "Trainer"
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function, batch_size=2, mu=5, use_gpu=True, workers=0):
+    def __init__(self, dataset, loss_function, batch_size=10, mu=5, use_gpu=True, workers=0):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -89,7 +89,7 @@ class Trainer:
         set1, set2 = ut.random_split(dataset, [length_set1, length_set2])
         return set1, set2
 
-    def create_custom_dataloder(self, label, unlabeled):
+    def create_custom_dataloader(self, label, unlabeled):
         '''
         Creates a custom dataset of label and unlabeled
         :param label:
@@ -142,6 +142,16 @@ class Trainer:
         self.summary.flush()
         self.summary.close()
 
+    def log_information(self, learn_rate, weight_decay, momentum, epochs, percent_to_validation):
+        self.logger.info(f"---------------Training model---------------")
+        self.logger.info(f"\t Batch size:\t\t{self.batch_size}")
+        self.logger.info(f"\t Mu:\t\t\t{self.mu}")
+        self.logger.info(f"\t Learn rate:\t\t{learn_rate}")
+        self.logger.info(f"\t Weight decay:\t\t{weight_decay}")
+        self.logger.info(f"\t Momentum:\t\t{momentum}")
+        self.logger.info(f"\t Epochs:\t\t{epochs}")
+        self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
+
     def train(self, model, learn_rate, weight_decay, momentum, epochs=10, percent_to_validation=0.2):
         '''
 
@@ -154,17 +164,19 @@ class Trainer:
         :param percent_to_validation:
         :return: a path of the saved model
         '''
+
+        self.log_information(learn_rate, weight_decay, momentum, epochs, percent_to_validation)
+
         # set model to GPU or CPU
         model.to(self.main_device)
 
         # split dataset to validation and train, then split train to labeled / unlabeled
         train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
-        # Math solves everything right?, self.mu*((len(train) / (1+self.mu)) / len(train))
         # The formula represents the percent amount of data to unlabeled data
-        labeled, unlabeled = self.split_dataset(train, self.mu*((len(train) / (1+self.mu)) / len(train)))
+        labeled, unlabeled = self.split_dataset(train, self.mu / (1+self.mu))
 
-        # Create dataloders for each part of the dataset
-        train_dataloader = self.create_custom_dataloder(labeled, unlabeled)
+        # Create dataloaders for each part of the dataset
+        train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
         val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
                                        num_workers=self.workers, pin_memory=True)
 
@@ -179,34 +191,34 @@ class Trainer:
 
             for session in ["training", "validation"]:
                 if session == "training":
-                    current_dataloder = train_dataloader
+                    current_dataloader = train_dataloader
                     model.train()
                 else:
-                    current_dataloder = val_dataloader
+                    current_dataloader = val_dataloader
                     model.eval()
 
                 combined_loss = 0
                 i = 0
-                for _, (X, U) in enumerate(current_dataloder):
+                for _, (X, U) in enumerate(current_dataloader):
 
                     if session == "training":
-                        sampleX, label = X
-                        sampleU = U
+                        batch_X, label = X
+                        batch_U = U
                         # Send unlabeled sample to GPU or CPU
-                        sampleU = sampleU.to(device=self.main_device)
+                        batch_U = batch_U.to(device=self.main_device)
                     else:
                         # Verification have no unlabeled dataset
-                        sampleX, label = (X, U)
+                        batch_X, label = (X, U)
 
                     # Send sample and label to GPU or CPU
-                    sampleX = sampleX.to(device=self.main_device)
+                    batch_X = batch_X.to(device=self.main_device)
 
                     label = label.to(device=self.main_device)
 
                     if session == "training":
                         # Reset gradients between training
                         optimizer.zero_grad()
-                        out = model(sampleX)
+                        out = model(batch_X)
                         '''
                         TODO
                         You can use SampleU as the unlabeled dataset and SampleX as the labeled. Note
@@ -216,7 +228,7 @@ class Trainer:
                     else:
                         # Disable gradient modifications
                         with torch.no_grad():
-                            out = model(sampleX)
+                            out = model(batch_X)
                             '''
                             TODO
                             Should we have another loss function here
