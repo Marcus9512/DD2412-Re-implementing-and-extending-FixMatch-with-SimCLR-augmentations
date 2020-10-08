@@ -172,7 +172,6 @@ class Trainer:
 
         # split dataset to validation and train, then split train to labeled / unlabeled
         train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
-        # Math solves everything right?, self.mu*((len(train) / (1+self.mu)) / len(train))
         # The formula represents the percent amount of data to unlabeled data
         labeled, unlabeled = self.split_dataset(train, self.mu / (1+self.mu))
 
