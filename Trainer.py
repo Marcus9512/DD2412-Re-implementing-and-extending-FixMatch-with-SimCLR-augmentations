@@ -89,7 +89,7 @@ class Trainer:
         set1, set2 = ut.random_split(dataset, [length_set1, length_set2])
         return set1, set2
 
-    def create_custom_dataloder(self, label, unlabeled):
+    def create_custom_dataloader(self, label, unlabeled):
         '''
         Creates a custom dataset of label and unlabeled
         :param label:
@@ -174,10 +174,10 @@ class Trainer:
         train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
         # Math solves everything right?, self.mu*((len(train) / (1+self.mu)) / len(train))
         # The formula represents the percent amount of data to unlabeled data
-        labeled, unlabeled = self.split_dataset(train, self.mu*((len(train) / (1+self.mu)) / len(train)))
+        labeled, unlabeled = self.split_dataset(train, self.mu / (1+self.mu))
 
-        # Create dataloders for each part of the dataset
-        train_dataloader = self.create_custom_dataloder(labeled, unlabeled)
+        # Create dataloaders for each part of the dataset
+        train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
         val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
                                        num_workers=self.workers, pin_memory=True)
 
@@ -192,15 +192,15 @@ class Trainer:
 
             for session in ["training", "validation"]:
                 if session == "training":
-                    current_dataloder = train_dataloader
+                    current_dataloader = train_dataloader
                     model.train()
                 else:
-                    current_dataloder = val_dataloader
+                    current_dataloader = val_dataloader
                     model.eval()
 
                 combined_loss = 0
                 i = 0
-                for _, (X, U) in enumerate(current_dataloder):
+                for _, (X, U) in enumerate(current_dataloader):
 
                     if session == "training":
                         batch_X, label = X
