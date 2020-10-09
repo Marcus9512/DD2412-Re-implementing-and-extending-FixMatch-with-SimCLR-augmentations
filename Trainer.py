@@ -4,7 +4,8 @@ import logging
 import torch.optim as opt
 import torch.utils.data as ut
 import torch.utils.tensorboard as tb
-
+import numpy as np
+from torch.optim.lr_scheduler import LambdaLR
 from os import path
 from datetime import datetime
 from Custom_dataset import Labeled_Unlabeled_dataset as lu
@@ -152,7 +153,7 @@ class Trainer:
         self.logger.info(f"\t Epochs:\t\t{epochs}")
         self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
 
-    def train(self, model, learn_rate, weight_decay, momentum, epochs=10, percent_to_validation=0.2):
+    def train(self, model, learn_rate, weight_decay, momentum, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
         '''
 
         :param model:
@@ -180,12 +181,19 @@ class Trainer:
         val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
                                        num_workers=self.workers, pin_memory=True)
 
+
         # select optimizer type, current is SGD
         optimizer = opt.SGD(model.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)
 
-        # set the wanted loss function to criterion
-        criterion = self.loss_function
+        #K total number of steps
+        K = epochs*len(train)/self.batch_size
+        #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
+        cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
+        scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
 
+        # set the wanted loss function to criterion
+        criterion_X = self.loss_function
+        criterion_U = self.loss_function
         for e in range(epochs):
             self.logger.info(f"Epoch {e} of {epochs}")
 
@@ -199,11 +207,13 @@ class Trainer:
 
                 combined_loss = 0
                 i = 0
-                for _, (X, U) in enumerate(current_dataloader):
+                for j, (X, U) in enumerate(current_dataloader):
 
                     if session == "training":
-                        batch_X, label = X
+                        k = e*len(train)+j*self.batch_size
+                        batch_X, label_X = X
                         batch_U = U
+                        batch_U = torch.cat(batch_U)
                         # Send unlabeled sample to GPU or CPU
                         batch_U = batch_U.to(device=self.main_device)
                     else:
@@ -213,27 +223,36 @@ class Trainer:
                     # Send sample and label to GPU or CPU
                     batch_X = batch_X.to(device=self.main_device)
 
-                    label = label.to(device=self.main_device)
+                    label_X = label_X.to(device=self.main_device)
 
                     if session == "training":
                         # Reset gradients between training
                         optimizer.zero_grad()
-                        out = model(batch_X)
-                        '''
-                        TODO
-                        You can use SampleU as the unlabeled dataset and SampleX as the labeled. Note
-                        that SampleU & SampleX is in tensorfromat
-                        '''
-                        loss = criterion(out, label)
+                        out_X = model(batch_X)
+                        loss_X = criterion_X(out_X, label_X)
+                        #TODO - implement weak_augment function
+                        #input_U_wa = self.weak_augment(batch_U)
+                        out_U_wa = model(batch_U)
+
+                        with torch.no_grad():
+                            #calc classification of wa data and detach the calculation from the training
+                            pseudo_labels = torch.softmax(out_U_wa, dim=1)
+                            #take out the highest values for each class and create a mask
+                            probs, labels_U = torch.max(pseudo_labels, dim=1)
+                            mask = probs.ge(threshold).float()
+
+                        #TODO - implement strong_augment function
+                        #input_U_sa = strong_augment(batch_U)
+                        out_U_sa = model(batch_U)
+                        loss_U = torch.mean(criterion_U(out_U_sa,labels_U)*mask)
+
+                        loss = loss_X + lambda_U*loss_U
                     else:
                         # Disable gradient modifications
                         with torch.no_grad():
                             out = model(batch_X)
-                            '''
-                            TODO
-                            Should we have another loss function here
-                            '''
-                            loss = criterion(out, label)
+
+                            loss = criterion_X(out, label_X)
 
 
                     combined_loss += loss.item()
@@ -243,10 +262,11 @@ class Trainer:
                         loss.backward()
                         optimizer.step()
 
+                        scheduler.step()
                     if (i % 1000 == 0):
                         self.logger.info(f"{session} img: {i}")
 
-                    i += label.size(0)
+                    i += label_X.size(0)
 
                 combined_loss /= i
                 self.logger.info(f"{session} loss: {combined_loss}")
@@ -294,7 +314,7 @@ Code graveyard
                                                 num_workers=self.workers, pin_memory=True)
     unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size*self.mu, shuffle=True,
                                                 num_workers=self.workers, pin_memory=True)
-    
+
     self.logger.info(f"Labeled {len(label_dataloader)}, Unlabeled {len(unlabeled_dataloader)}")
     assert len(label_dataloader) == len(unlabeled_dataloader)
     return zip(label_dataloader, unlabeled_dataloader)
