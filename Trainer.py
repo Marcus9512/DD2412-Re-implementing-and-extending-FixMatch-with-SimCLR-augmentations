@@ -231,9 +231,9 @@ class Trainer:
                         optimizer.zero_grad()
                         out_X = model(batch_X)
                         loss_X = criterion_X(out_X, label_X)
-                        #TODO - implement weak_augment function
-                        #input_U_wa = self.weak_augment(batch_U)
-                        out_U_wa = model(batch_U)
+
+                        input_U_wa = weak_augment(batch_U)
+                        out_U_wa = model(input_U_wa)
 
                         with torch.no_grad():
                             #calc classification of wa data and detach the calculation from the training
@@ -242,9 +242,8 @@ class Trainer:
                             probs, labels_U = torch.max(pseudo_labels, dim=1)
                             mask = probs.ge(threshold).float()
 
-                        #TODO - implement strong_augment function
-                        #input_U_sa = strong_augment(batch_U)
-                        out_U_sa = model(batch_U)
+                        input_U_sa = strong_augment(batch_U)
+                        out_U_sa = model(input_U_sa)
                         loss_U = torch.mean(criterion_U(out_U_sa,labels_U)*mask)
 
                         loss = loss_X + lambda_U*loss_U
