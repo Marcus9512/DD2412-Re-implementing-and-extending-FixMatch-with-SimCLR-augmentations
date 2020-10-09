@@ -9,6 +9,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from os import path
 from datetime import datetime
 from Custom_dataset import Labeled_Unlabeled_dataset as lu
+from augmentation import *
 
 LOGGER_NAME = "Trainer"
 
