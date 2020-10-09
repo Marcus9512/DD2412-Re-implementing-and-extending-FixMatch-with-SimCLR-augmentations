@@ -207,9 +207,10 @@ class Trainer:
 
                 combined_loss = 0
                 i = 0
-                for k, (X, U) in enumerate(current_dataloader):
+                for j, (X, U) in enumerate(current_dataloader):
 
                     if session == "training":
+                        k = e*len(train)+j*self.batch_size
                         batch_X, label_X = X
                         batch_U = U
                         batch_U = torch.cat(batch_U)
