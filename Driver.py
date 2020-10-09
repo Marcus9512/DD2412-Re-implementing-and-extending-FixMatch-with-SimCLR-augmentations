@@ -68,10 +68,9 @@ if __name__ == "__main__":
         exit(1)
 
     model = torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=False, num_classes=10)
-    loss_function_X = nn.CrossEntropyLoss()
-    loss_function_U = nn.CrossEntropyLoss()
+    loss_function = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset, loss_function_X,loss_function_U, batch_size=10)
+    trainer = Trainer(dataset, loss_function, batch_size=10)
     path = trainer.train(model, learn_rate=0.1, weight_decay=1e-9, momentum=1e-9, epochs=5)
     trainer.test(path, model)
     trainer.close_summary()

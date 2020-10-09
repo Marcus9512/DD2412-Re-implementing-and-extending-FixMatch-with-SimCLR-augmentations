@@ -15,7 +15,7 @@ LOGGER_NAME = "Trainer"
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function_X, loss_function_U, batch_size=10, mu=5, use_gpu=True, workers=0):
+    def __init__(self, dataset, loss_function, batch_size=10, mu=5, use_gpu=True, workers=0):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -32,8 +32,7 @@ class Trainer:
         self.logger = logger
         self.dataset = dataset
         self.batch_size = batch_size
-        self.loss_function_U = loss_function_U
-        self.loss_function_X = loss_function_X
+        self.loss_function = loss_function
         self.workers = workers
 
         # setup GPU if possible
@@ -193,8 +192,8 @@ class Trainer:
         scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
 
         # set the wanted loss function to criterion
-        criterion_X = self.loss_function_X
-        criterion_U = self.loss_function_U
+        criterion_X = self.loss_function
+        criterion_U = self.loss_function
         for e in range(epochs):
             self.logger.info(f"Epoch {e} of {epochs}")
 
@@ -209,9 +208,6 @@ class Trainer:
                 combined_loss = 0
                 i = 0
                 for k, (X, U) in enumerate(current_dataloader):
-                    K = len(current_dataloader)
-                    print(k)
-                    print(K)
 
                     if session == "training":
                         batch_X, label_X = X
@@ -233,7 +229,7 @@ class Trainer:
                         optimizer.zero_grad()
                         out_X = model(batch_X)
                         loss_X = criterion_X(out_X, label_X)
-
+                        #TODO - implement weak_augment function
                         #input_U_wa = self.weak_augment(batch_U)
                         out_U_wa = model(batch_U)
 
@@ -244,9 +240,10 @@ class Trainer:
                             probs, labels_U = torch.max(pseudo_labels, dim=1)
                             mask = probs.ge(threshold).float()
 
+                        #TODO - implement strong_augment function
                         #input_U_sa = strong_augment(batch_U)
                         out_U_sa = model(batch_U)
-                        loss_U = torch.mean(self.loss_function_U(out_U_sa,labels_U)*mask)
+                        loss_U = torch.mean(criterion_U(out_U_sa,labels_U)*mask)
 
                         loss = loss_X + lambda_U*loss_U
                     else:
