@@ -15,7 +15,7 @@ def weak_augment(batch):
     ])
 
     for i in range(len(batch)):
-        batch[i] = weak_transform(batch[i])
+        batch[i] = weak_transform(batch[i].cpu())
 
     torchvision.utils.save_image(batch[0], "img_weak_aug.png")
     return batch
@@ -33,7 +33,7 @@ def strong_augment(batch):
         ])
 
     for i in range(len(batch)):
-        batch[i] = strong_transform(batch[i])
+        batch[i] = strong_transform(batch[i].cpu())
 
         batch[i] = cutout(batch[i], 16, 16)
 

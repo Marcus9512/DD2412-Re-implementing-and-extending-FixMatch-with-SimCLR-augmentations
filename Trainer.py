@@ -154,7 +154,7 @@ class Trainer:
         self.summary.flush()
         self.summary.close()
 
-    def log_information(self, learn_rate, weight_decay, momentum, epochs, percent_to_validation):
+    def log_information(self, learn_rate, weight_decay, momentum, epochs, percent_to_validation, num_labels):
         self.logger.info(f"---------------Training model---------------")
         self.logger.info(f"\t Batch size:\t\t{self.batch_size}")
         self.logger.info(f"\t Mu:\t\t\t{self.mu}")
@@ -163,8 +163,9 @@ class Trainer:
         self.logger.info(f"\t Momentum:\t\t{momentum}")
         self.logger.info(f"\t Epochs:\t\t{epochs}")
         self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
+        self.logger.info(f"\t Number of labels:\t{num_labels}")
 
-    def train(self, model, learn_rate, weight_decay, momentum, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
+    def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
         '''
 
         :param model:
@@ -174,28 +175,40 @@ class Trainer:
         :param momentum:
         :param epochs:
         :param percent_to_validation:
+        :param num_labels: Number of labeled data per class
         :return: a path of the saved model
         '''
 
-        self.log_information(learn_rate, weight_decay, momentum, epochs, percent_to_validation)
+        self.log_information(learn_rate, weight_decay, momentum, epochs, percent_to_validation, num_labels)
 
         # set model to GPU or CPU
         model.to(self.main_device)
 
         # split dataset to validation and train, then split train to labeled / unlabeled
-        train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
+        #train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
         # The formula represents the percent amount of data to unlabeled data
-        labeled, unlabeled = self.split_dataset(train, self.mu / (1 + self.mu))
+        #labeled, unlabeled = self.split_dataset(train, self.mu / (1 + self.mu))
 
-        #labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], 250)
-        #val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
+        labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], num_labels)
+        val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
 
         # Create dataloaders for each part of the dataset
         train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
         val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
                                        num_workers=self.workers, pin_memory=True)
+        '''
+        TO VERIFY NUMBER OF LABELS
+        store = np.zeros(10)
+        for j, (X, U) in enumerate(train_dataloader):
+            batch_X, label_X = X
+            for e in range(len(label_X)):
+                store[label_X[e]] += 1
 
-
+        print(store)
+        print(len(train_dataloader))
+        print(len(val_dataloader))
+        exit(-1)
+        '''
         # select optimizer type, current is SGD
         optimizer = opt.SGD(model.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)
 
