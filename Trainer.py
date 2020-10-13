@@ -10,7 +10,7 @@ from os import path
 from datetime import datetime
 from Custom_dataset import Labeled_Unlabeled_dataset as lu
 from augmentation import *
-from torch_ema import ExponentialMovingAverage
+from torch_ema.ema import ExponentialMovingAverage
 from tqdm import tqdm , trange
 
 LOGGER_NAME = "Trainer"
