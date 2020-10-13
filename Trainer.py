@@ -10,6 +10,7 @@ from os import path
 from datetime import datetime
 from Custom_dataset import Labeled_Unlabeled_dataset as lu
 from augmentation import *
+from sklearn.model_selection import *
 
 LOGGER_NAME = "Trainer"
 
@@ -92,9 +93,13 @@ class Trainer:
         return set1, set2
 
     def split_labels_per_class(self, dataset, num_labels):
-        #shuffle dataset
-        train_data = dataset.train_data
-        train_label = dataset.train_labels
+
+        indices = np.arange(len(dataset))
+        labels_indices, unlabeled_indices = train_test_split(indices, train_size=num_labels * self.dataset["num_classes"],
+                                                       stratify=dataset.targets)
+
+        return ut.Subset(dataset, labels_indices), ut.Subset(dataset, unlabeled_indices)
+
 
     def create_custom_dataloader(self, label, unlabeled):
         '''
@@ -180,10 +185,10 @@ class Trainer:
         # split dataset to validation and train, then split train to labeled / unlabeled
         train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
         # The formula represents the percent amount of data to unlabeled data
-        labeled, unlabeled = self.split_dataset(train, self.mu / (1+self.mu))
+        labeled, unlabeled = self.split_dataset(train, self.mu / (1 + self.mu))
 
-        print(labeled.shape)
-        exit()
+        #labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], 250)
+        #val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
 
         # Create dataloaders for each part of the dataset
         train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
@@ -195,7 +200,7 @@ class Trainer:
         optimizer = opt.SGD(model.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)
 
         #K total number of steps
-        K = epochs*len(train)/self.batch_size
+        K = epochs*(len(labeled)+len(unlabeled))/self.batch_size
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
         cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
         scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
@@ -219,7 +224,7 @@ class Trainer:
                 for j, (X, U) in enumerate(current_dataloader):
 
                     if session == "training":
-                        k = e*len(train)+j*self.batch_size
+                        k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
                         batch_X, label_X = X
                         batch_U = U
                         batch_U = torch.cat(batch_U)
@@ -227,7 +232,7 @@ class Trainer:
                         batch_U = batch_U.to(device=self.main_device)
                     else:
                         # Verification have no unlabeled dataset
-                        batch_X, label = (X, U)
+                        batch_X, label_X = (X, U)
 
                     # Send sample and label to GPU or CPU
                     batch_X = batch_X.to(device=self.main_device)

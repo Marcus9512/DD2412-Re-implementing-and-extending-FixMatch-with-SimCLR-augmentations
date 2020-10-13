@@ -30,11 +30,11 @@ def get_dataset(arg):
     :return:
     '''
 
-    def get_return_format(train, test, classes, name):
+    def get_return_format(train, test, num_classes, name):
         return {
             "train_set": train,
             "test_set": test,
-            "classes": classes,
+            "num_classes": num_classes,
             "name": name
         }
 
@@ -44,13 +44,12 @@ def get_dataset(arg):
         # Based from pytorch Cifar10, https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
         train = torchvision.datasets.CIFAR10(root='./Data', train=True, download=True, transform = transform)
         test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform = transform)
-        classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-        return get_return_format(train, test, classes, "CIFAR10")
+        return get_return_format(train, test, 10, "CIFAR10")
 
     elif arg.lower() == "cifar100":
         train = torchvision.datasets.CIFAR100(root='./Data', train=True, download=True, transform = transform)
         test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform = transform)
-        return get_return_format(train, test, None, "CIFAR100")
+        return get_return_format(train, test, 100, "CIFAR100")
 
     return None
 
