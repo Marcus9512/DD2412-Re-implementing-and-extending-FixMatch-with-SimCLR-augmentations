@@ -91,6 +91,11 @@ class Trainer:
         set1, set2 = ut.random_split(dataset, [length_set1, length_set2])
         return set1, set2
 
+    def split_labels_per_class(self, dataset, num_labels):
+        #shuffle dataset
+        train_data = dataset.train_data
+        train_label = dataset.train_labels
+
     def create_custom_dataloader(self, label, unlabeled):
         '''
         Creates a custom dataset of label and unlabeled
@@ -176,6 +181,9 @@ class Trainer:
         train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
         # The formula represents the percent amount of data to unlabeled data
         labeled, unlabeled = self.split_dataset(train, self.mu / (1+self.mu))
+
+        print(labeled.shape)
+        exit()
 
         # Create dataloaders for each part of the dataset
         train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
