@@ -10,9 +10,10 @@ from os import path
 from datetime import datetime
 from Custom_dataset import Labeled_Unlabeled_dataset as lu
 from augmentation import *
+from torch_ema import ExponentialMovingAverage
+from tqdm import tqdm , trange
 
 LOGGER_NAME = "Trainer"
-
 
 class Trainer:
 
@@ -185,6 +186,7 @@ class Trainer:
 
         # select optimizer type, current is SGD
         optimizer = opt.SGD(model.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)
+        ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
 
         #K total number of steps
         K = epochs*len(train)/self.batch_size
@@ -195,7 +197,8 @@ class Trainer:
         # set the wanted loss function to criterion
         criterion_X = self.loss_function
         criterion_U = self.loss_function
-        for e in range(epochs):
+
+        for e in trange(epochs):
             self.logger.info(f"Epoch {e} of {epochs}")
 
             for session in ["training", "validation"]:
@@ -208,6 +211,7 @@ class Trainer:
 
                 combined_loss = 0
                 i = 0
+                pbar = tqdm(total=len(current_dataloader))
                 for j, (X, U) in enumerate(current_dataloader):
 
                     if session == "training":
@@ -245,7 +249,7 @@ class Trainer:
                         input_U_sa = strong_augment(batch_U)
                         out_U_sa = model(input_U_sa)
                         loss_U = torch.mean(criterion_U(out_U_sa,labels_U)*mask)
-
+ 
                         loss = loss_X + lambda_U*loss_U
                     else:
                         # Disable gradient modifications
@@ -261,13 +265,13 @@ class Trainer:
                         # Backprop
                         loss.backward()
                         optimizer.step()
-
                         scheduler.step()
+                        ema.update(model.parameters())
                     if (i % 1000 == 0):
                         self.logger.info(f"{session} img: {i}")
 
                     i += label_X.size(0)
-
+                    pbar.update(1)
                 combined_loss /= i
                 self.logger.info(f"{session} loss: {combined_loss}")
                 self.summary.add_scalar('Loss/' + session, combined_loss, e)
@@ -294,7 +298,9 @@ class Trainer:
             # Send sample and label to GPU or CPU
             sample = sample.to(device=self.main_device, dtype=torch.float32)
             label = label.to(device=self.main_device, dtype=torch.float32)
-
+            
+            # Get parameters from EMA
+            ema.copy_to(model.parameters())
             with torch.no_grad():
                 out = model(sample)
                 _, pred = torch.max(out, 1)
