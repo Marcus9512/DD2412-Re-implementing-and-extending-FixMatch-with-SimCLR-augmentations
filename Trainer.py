@@ -19,7 +19,7 @@ LOGGER_NAME = "Trainer"
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function, batch_size=10, mu=5, use_gpu=True, workers=0):
+    def __init__(self, dataset, loss_function, batch_size=10, mu=5, use_gpu=True, workers=4):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -213,9 +213,10 @@ class Trainer:
         '''
         # select optimizer type, current is SGD
         optimizer = opt.SGD(model.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)
-        ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
+        self.ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
 
         #K total number of steps
+        #Ska inte K = 2^(20) ?
         K = epochs*(len(labeled)+len(unlabeled))/self.batch_size
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
         cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
@@ -242,7 +243,8 @@ class Trainer:
                 for j, (X, U) in enumerate(current_dataloader):
 
                     if session == "training":
-                        k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
+                        #k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
+                        k = e*(len(labeled)+len(unlabeled))/self.batch_size+j
                         batch_X, label_X = X
                         batch_U = U
                         batch_U = torch.cat(batch_U)
@@ -293,7 +295,7 @@ class Trainer:
                         loss.backward()
                         optimizer.step()
                         scheduler.step()
-                        ema.update(model.parameters())
+                        self.ema.update(model.parameters())
                     if (i % 1000 == 0):
                         self.logger.info(f"{session} img: {i}")
 
@@ -327,7 +329,7 @@ class Trainer:
             label = label.to(device=self.main_device, dtype=torch.float32)
             
             # Get parameters from EMA
-            ema.copy_to(model.parameters())
+            self.ema.copy_to(model.parameters())
             with torch.no_grad():
                 out = model(sample)
                 _, pred = torch.max(out, 1)
