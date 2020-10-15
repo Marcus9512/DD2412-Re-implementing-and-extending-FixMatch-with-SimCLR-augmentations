@@ -5,6 +5,8 @@ import torch.optim as opt
 import torch.utils.data as ut
 import torch.utils.tensorboard as tb
 import numpy as np
+import sys
+
 from torch.optim.lr_scheduler import LambdaLR
 from os import path
 from datetime import datetime
@@ -204,17 +206,20 @@ class Trainer:
 
         self.logger.info(f"Dataset length: {len(trainset)}")
 
-        labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], num_labels)
-        val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
+        labeled, rest = self.split_labels_per_class(self.dataset["train_set"], num_labels)
+        #val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
 
-        self.logger.info(f"labeled len {len(labeled)} unlabeled len {len(unlabeled)}")
+        self.logger.info(f"labeled len {len(labeled)} rest len {len(rest)}")
 
         # Create dataloaders for each part of the dataset
         #train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
-        label_dataloader, unlabeled_dataloader = self.create_custom_dataloader2(labeled, unlabeled)
+        label_dataloader, val_dataloader = self.create_custom_dataloader2(labeled, rest)
 
-        val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
+        unlabeled_dataloader = ut.DataLoader(self.dataset["unlabeled"], batch_size=self.batch_size*self.mu, shuffle=True,
                                        num_workers=self.workers, pin_memory=True)
+
+        #val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
+        #                               num_workers=self.workers, pin_memory=True)
         '''
         TO VERIFY NUMBER OF LABELS
         store = np.zeros(10)
@@ -234,7 +239,7 @@ class Trainer:
 
         #K total number of steps
         #Ska inte K = 2^(20) ?
-        K = epochs*(len(labeled)+len(unlabeled))/self.batch_size
+        K = epochs*(len(labeled)+len(unlabeled_dataloader))/self.batch_size
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
         cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
         scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
@@ -250,7 +255,12 @@ class Trainer:
             for session in ["training", "validation"]:
                 if session == "training":
                     current_dataloader = zip(label_dataloader, unlabeled_dataloader)
-                    length = max(len(label_dataloader), len(unlabeled_dataloader))
+                    length = min(len(label_dataloader), len(unlabeled_dataloader))
+                    #print("length ",length)
+
+                    #a = len(list(current_dataloader))
+                    #print("list ", a)
+                    #assert a == length
                     model.train()
                 else:
                     current_dataloader = val_dataloader
@@ -264,12 +274,17 @@ class Trainer:
 
                     if session == "training":
                         # k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
-                        k = e * (len(labeled) + len(unlabeled)) / self.batch_size + j
+                        k = e * (len(labeled) + len(unlabeled_dataloader)) / self.batch_size + j
                         batch_X, label_X = X
-                        batch_U, _ = U
+                        weak_a, strong_a = U
+
+                        self.logger.info(f"batch_X {batch_X.shape}")
+                        self.logger.info(f"Label_X {label_X.shape}")
+                        #self.logger.info(f"batch_U {batch_U.shape}")
+
                         #batch_U = torch.cat(batch_U)
                         # Send unlabeled sample to GPU or CPU
-                        batch_U = batch_U.to(device=self.main_device)
+                        #batch_U = batch_U.to(device=self.main_device)
                     else:
                         # Verification have no unlabeled dataset
                         batch_X, label_X = (X, U)
@@ -288,8 +303,11 @@ class Trainer:
                         label_X.detach()
                         batch_X.detach()
 
-                        input_U_wa = weak_augment(batch_U)
-                        out_U_wa = model(input_U_wa)
+                        #input_U_wa = weak_augment(batch_U).to(device=self.main_device)
+                        weak_a = weak_a.to(device=self.main_device)
+                        out_U_wa = model(weak_a)
+
+                        weak_a.detach()
 
                         with torch.no_grad():
                             # calc classification of wa data and detach the calculation from the training
@@ -298,9 +316,12 @@ class Trainer:
                             probs, labels_U = torch.max(pseudo_labels, dim=1)
                             mask = probs.ge(threshold).float()
 
-                        input_U_sa = strong_augment(batch_U)
-                        out_U_sa = model(input_U_sa)
+                        #input_U_sa = strong_augment(batch_U).to(device=self.main_device)
+                        strong_a = strong_a.to(device=self.main_device)
+                        out_U_sa = model(strong_a)
                         loss_U = torch.mean(criterion_U(out_U_sa, labels_U) * mask)
+
+                        strong_a.detach()
 
                         loss = loss_X + lambda_U * loss_U
                     else:
