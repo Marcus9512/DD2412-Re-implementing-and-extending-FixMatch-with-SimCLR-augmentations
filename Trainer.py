@@ -205,15 +205,16 @@ class Trainer:
         self.logger.info(f"Dataset length: {len(trainset)}")
 
         labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], num_labels)
-        #val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
+        val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
 
         self.logger.info(f"labeled len {len(labeled)} unlabeled len {len(unlabeled)}")
 
         # Create dataloaders for each part of the dataset
         #train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
         label_dataloader, unlabeled_dataloader = self.create_custom_dataloader2(labeled, unlabeled)
-        #val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
-         #                              num_workers=self.workers, pin_memory=True)
+
+        val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
+                                       num_workers=self.workers, pin_memory=True)
         '''
         TO VERIFY NUMBER OF LABELS
         store = np.zeros(10)
@@ -245,65 +246,86 @@ class Trainer:
         model.train()
         for e in trange(epochs):
             self.logger.info(f"Epoch {e} of {epochs}")
-            combined_loss = 0
-            i = 0
-            combined_dataloader = zip(label_dataloader, unlabeled_dataloader)
-            #pbar = tqdm(total=len(combined_dataloader))
-            for j, (X, U) in enumerate(combined_dataloader):
 
-                # k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
-                k = e * (len(labeled) + len(unlabeled)) / self.batch_size + j
-                batch_X, label_X = X
-                batch_U, _ = U
+            for session in ["training", "validation"]:
+                if session == "training":
+                    current_dataloader = zip(label_dataloader, unlabeled_dataloader)
+                    length = max(len(label_dataloader), len(unlabeled_dataloader))
+                    model.train()
+                else:
+                    current_dataloader = val_dataloader
+                    length = len(val_dataloader)
+                    model.eval()
 
-                self.logger.info(f"Batch x {batch_X.shape}, batch u {batch_U.shape}")
-                #batch_U = torch.cat(batch_U)
-                # Send unlabeled sample to GPU or CPU
-                batch_U = batch_U.to(device=self.main_device)
+                combined_loss = 0
+                i = 0
+                pbar = tqdm(total=length)
+                for j, (X, U) in enumerate(current_dataloader):
 
-                # Send sample and label to GPU or CPU
-                batch_X = batch_X.to(device=self.main_device)
+                    if session == "training":
+                        # k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
+                        k = e * (len(labeled) + len(unlabeled)) / self.batch_size + j
+                        batch_X, label_X = X
+                        batch_U, _ = U
+                        #batch_U = torch.cat(batch_U)
+                        # Send unlabeled sample to GPU or CPU
+                        batch_U = batch_U.to(device=self.main_device)
+                    else:
+                        # Verification have no unlabeled dataset
+                        batch_X, label_X = (X, U)
 
-                label_X = label_X.to(device=self.main_device)
+                    # Send sample and label to GPU or CPU
+                    batch_X = batch_X.to(device=self.main_device)
 
-                # Reset gradients between training
-                optimizer.zero_grad()
-                out_X = model(batch_X)
-                loss_X = criterion_X(out_X, label_X)
+                    label_X = label_X.to(device=self.main_device)
 
-                input_U_wa = weak_augment(batch_U)
-                out_U_wa = model(input_U_wa)
+                    if session == "training":
+                        # Reset gradients between training
+                        optimizer.zero_grad()
+                        out_X = model(batch_X)
+                        loss_X = criterion_X(out_X, label_X)
 
-                with torch.no_grad():
-                    # calc classification of wa data and detach the calculation from the training
-                    pseudo_labels = torch.softmax(out_U_wa, dim=1)
-                    # take out the highest values for each class and create a mask
-                    probs, labels_U = torch.max(pseudo_labels, dim=1)
-                    mask = probs.ge(threshold).float()
+                        label_X.detach()
+                        batch_X.detach()
 
-                input_U_sa = strong_augment(batch_U)
-                out_U_sa = model(input_U_sa)
-                loss_U = torch.mean(criterion_U(out_U_sa, labels_U) * mask)
+                        input_U_wa = weak_augment(batch_U)
+                        out_U_wa = model(input_U_wa)
 
-                loss = loss_X + lambda_U * loss_U
+                        with torch.no_grad():
+                            # calc classification of wa data and detach the calculation from the training
+                            pseudo_labels = torch.softmax(out_U_wa, dim=1)
+                            # take out the highest values for each class and create a mask
+                            probs, labels_U = torch.max(pseudo_labels, dim=1)
+                            mask = probs.ge(threshold).float()
 
+                        input_U_sa = strong_augment(batch_U)
+                        out_U_sa = model(input_U_sa)
+                        loss_U = torch.mean(criterion_U(out_U_sa, labels_U) * mask)
 
-                combined_loss += loss.item()
+                        loss = loss_X + lambda_U * loss_U
+                    else:
+                        # Disable gradient modifications
+                        with torch.no_grad():
+                            out = model(batch_X)
 
-                # Backprop
-                loss.backward()
-                optimizer.step()
-                scheduler.step()
-                self.ema.update(model.parameters())
+                            loss = criterion_X(out, label_X)
 
-                if (i % 1000 == 0):
-                    self.logger.info(f"Training img: {i}")
+                    combined_loss += loss.item()
 
-                i += label_X.size(0)
-                #pbar.update(1)
-            combined_loss /= i
-            self.logger.info(f"Training loss: {combined_loss}")
-            self.summary.add_scalar('Loss/Training', combined_loss, e)
+                    if session == "training":
+                        # Backprop
+                        loss.backward()
+                        optimizer.step()
+                        scheduler.step()
+                        self.ema.update(model.parameters())
+                    if (i % 1000 == 0):
+                        self.logger.info(f"{session} img: {i}")
+
+                    i += label_X.size(0)
+                    pbar.update(1)
+                combined_loss /= i
+                self.logger.info(f"{session} loss: {combined_loss}")
+                self.summary.add_scalar('Loss/' + session, combined_loss, e)
 
         return self.save_network(model)
 
@@ -355,79 +377,5 @@ Code graveyard
     return zip(label_dataloader, unlabeled_dataloader)
     
     
-     for session in ["training", "validation"]:
-                if session == "training":
-                    current_dataloader = train_dataloader
-                    model.train()
-                else:
-                    current_dataloader = val_dataloader
-                    model.eval()
-
-                combined_loss = 0
-                i = 0
-                pbar = tqdm(total=len(current_dataloader))
-                for j, (X, U) in enumerate(current_dataloader):
-
-                    if session == "training":
-                        #k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
-                        k = e*(len(labeled)+len(unlabeled))/self.batch_size+j
-                        batch_X, label_X = X
-                        batch_U = U
-                        batch_U = torch.cat(batch_U)
-                        # Send unlabeled sample to GPU or CPU
-                        batch_U = batch_U.to(device=self.main_device)
-                    else:
-                        # Verification have no unlabeled dataset
-                        batch_X, label_X = (X, U)
-
-                    # Send sample and label to GPU or CPU
-                    batch_X = batch_X.to(device=self.main_device)
-
-                    label_X = label_X.to(device=self.main_device)
-
-                    if session == "training":
-                        # Reset gradients between training
-                        optimizer.zero_grad()
-                        out_X = model(batch_X)
-                        loss_X = criterion_X(out_X, label_X)
-
-                        input_U_wa = weak_augment(batch_U)
-                        out_U_wa = model(input_U_wa)
-
-                        with torch.no_grad():
-                            #calc classification of wa data and detach the calculation from the training
-                            pseudo_labels = torch.softmax(out_U_wa, dim=1)
-                            #take out the highest values for each class and create a mask
-                            probs, labels_U = torch.max(pseudo_labels, dim=1)
-                            mask = probs.ge(threshold).float()
-
-                        input_U_sa = strong_augment(batch_U)
-                        out_U_sa = model(input_U_sa)
-                        loss_U = torch.mean(criterion_U(out_U_sa,labels_U)*mask)
- 
-                        loss = loss_X + lambda_U*loss_U
-                    else:
-                        # Disable gradient modifications
-                        with torch.no_grad():
-                            out = model(batch_X)
-
-                            loss = criterion_X(out, label_X)
-
-
-                    combined_loss += loss.item()
-
-                    if session == "training":
-                        # Backprop
-                        loss.backward()
-                        optimizer.step()
-                        scheduler.step()
-                        self.ema.update(model.parameters())
-                    if (i % 1000 == 0):
-                        self.logger.info(f"{session} img: {i}")
-
-                    i += label_X.size(0)
-                    pbar.update(1)
-                combined_loss /= i
-                self.logger.info(f"{session} loss: {combined_loss}")
-                self.summary.add_scalar('Loss/' + session, combined_loss, e)
+     
 '''
