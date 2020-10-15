@@ -10,14 +10,16 @@ from os import path
 from datetime import datetime
 from Custom_dataset import Labeled_Unlabeled_dataset as lu
 from augmentation import *
+from sklearn.model_selection import *
 from torch_ema.ema import ExponentialMovingAverage
 from tqdm import tqdm , trange
+
 
 LOGGER_NAME = "Trainer"
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function, batch_size=10, mu=5, use_gpu=True, workers=0):
+    def __init__(self, dataset, loss_function, batch_size=10, mu=5, use_gpu=True, workers=4):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -92,6 +94,15 @@ class Trainer:
         set1, set2 = ut.random_split(dataset, [length_set1, length_set2])
         return set1, set2
 
+    def split_labels_per_class(self, dataset, num_labels):
+
+        indices = np.arange(len(dataset))
+        labels_indices, unlabeled_indices = train_test_split(indices, train_size=num_labels * self.dataset["num_classes"],
+                                                       stratify=dataset.targets)
+
+        return ut.Subset(dataset, labels_indices), ut.Subset(dataset, unlabeled_indices)
+
+
     def create_custom_dataloader(self, label, unlabeled):
         '''
         Creates a custom dataset of label and unlabeled
@@ -145,7 +156,7 @@ class Trainer:
         self.summary.flush()
         self.summary.close()
 
-    def log_information(self, learn_rate, weight_decay, momentum, epochs, percent_to_validation):
+    def log_information(self, learn_rate, weight_decay, momentum, epochs, percent_to_validation, num_labels):
         self.logger.info(f"---------------Training model---------------")
         self.logger.info(f"\t Batch size:\t\t{self.batch_size}")
         self.logger.info(f"\t Mu:\t\t\t{self.mu}")
@@ -154,8 +165,9 @@ class Trainer:
         self.logger.info(f"\t Momentum:\t\t{momentum}")
         self.logger.info(f"\t Epochs:\t\t{epochs}")
         self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
+        self.logger.info(f"\t Number of labels:\t{num_labels}")
 
-    def train(self, model, learn_rate, weight_decay, momentum, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
+    def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
         '''
 
         :param model:
@@ -165,31 +177,47 @@ class Trainer:
         :param momentum:
         :param epochs:
         :param percent_to_validation:
+        :param num_labels: Number of labeled data per class
         :return: a path of the saved model
         '''
 
-        self.log_information(learn_rate, weight_decay, momentum, epochs, percent_to_validation)
+        self.log_information(learn_rate, weight_decay, momentum, epochs, percent_to_validation, num_labels)
 
         # set model to GPU or CPU
         model.to(self.main_device)
 
         # split dataset to validation and train, then split train to labeled / unlabeled
-        train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
+        #train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
         # The formula represents the percent amount of data to unlabeled data
-        labeled, unlabeled = self.split_dataset(train, self.mu / (1+self.mu))
+        #labeled, unlabeled = self.split_dataset(train, self.mu / (1 + self.mu))
+
+        labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], num_labels)
+        val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
 
         # Create dataloaders for each part of the dataset
         train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
         val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
                                        num_workers=self.workers, pin_memory=True)
+        '''
+        TO VERIFY NUMBER OF LABELS
+        store = np.zeros(10)
+        for j, (X, U) in enumerate(train_dataloader):
+            batch_X, label_X = X
+            for e in range(len(label_X)):
+                store[label_X[e]] += 1
 
-
+        print(store)
+        print(len(train_dataloader))
+        print(len(val_dataloader))
+        exit(-1)
+        '''
         # select optimizer type, current is SGD
         optimizer = opt.SGD(model.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)
-        ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
+        self.ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
 
         #K total number of steps
-        K = epochs*len(train)/self.batch_size
+        #Ska inte K = 2^(20) ?
+        K = epochs*(len(labeled)+len(unlabeled))/self.batch_size
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
         cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
         scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
@@ -215,7 +243,8 @@ class Trainer:
                 for j, (X, U) in enumerate(current_dataloader):
 
                     if session == "training":
-                        k = e*len(train)+j*self.batch_size
+                        #k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
+                        k = e*(len(labeled)+len(unlabeled))/self.batch_size+j
                         batch_X, label_X = X
                         batch_U = U
                         batch_U = torch.cat(batch_U)
@@ -223,7 +252,7 @@ class Trainer:
                         batch_U = batch_U.to(device=self.main_device)
                     else:
                         # Verification have no unlabeled dataset
-                        batch_X, label = (X, U)
+                        batch_X, label_X = (X, U)
 
                     # Send sample and label to GPU or CPU
                     batch_X = batch_X.to(device=self.main_device)
@@ -266,7 +295,7 @@ class Trainer:
                         loss.backward()
                         optimizer.step()
                         scheduler.step()
-                        ema.update(model.parameters())
+                        self.ema.update(model.parameters())
                     if (i % 1000 == 0):
                         self.logger.info(f"{session} img: {i}")
 
@@ -300,7 +329,7 @@ class Trainer:
             label = label.to(device=self.main_device, dtype=torch.float32)
             
             # Get parameters from EMA
-            ema.copy_to(model.parameters())
+            self.ema.copy_to(model.parameters())
             with torch.no_grad():
                 out = model(sample)
                 _, pred = torch.max(out, 1)
