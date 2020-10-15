@@ -72,7 +72,8 @@ if __name__ == "__main__":
     model = Wide_ResNet(28, 2, 0.3, 10)
     loss_function = nn.CrossEntropyLoss()
 
+
     trainer = Trainer(dataset, loss_function, batch_size=64)
-    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=50, num_labels=250)
+    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=1, num_labels=400)
     trainer.test(path, model)
     trainer.close_summary()
