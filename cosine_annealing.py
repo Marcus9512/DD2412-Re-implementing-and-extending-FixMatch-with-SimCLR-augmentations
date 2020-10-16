@@ -3,7 +3,8 @@ from torch.optim.lr_scheduler import _LRScheduler
 class LegacyCosineAnnealingLR(_LRScheduler):
 
     """
-    Pytorch legacy code
+    Pytorch legacy code because of division by zero bug in their library
+    
     Set the learning rate of each parameter group using a cosine annealing
     schedule, where :math:`\eta_{max}` is set to the initial lr and
     :math:`T_{cur}` is the number of epochs since the last restart in SGDR:

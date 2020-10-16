@@ -178,21 +178,6 @@ class Trainer:
         self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
         self.logger.info(f"\t Number of labels:\t{num_labels}")
 
-    def get_cosine_schedule_with_warmup(self,optimizer,
-                                        num_warmup_steps,
-                                        num_training_steps,
-                                        num_cycles=7. / 16.,
-                                        last_epoch=-1):
-        import math
-        def _lr_lambda(current_step):
-            if current_step < num_warmup_steps:
-                return float(current_step) / float(max(1, num_warmup_steps))
-            no_progress = float(current_step - num_warmup_steps) / \
-                          float(max(1, num_training_steps - num_warmup_steps))
-            return max(0., math.cos(math.pi * num_cycles * no_progress))
-
-        return LambdaLR(optimizer, _lr_lambda, last_epoch)
-
     def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
         '''
 
@@ -253,12 +238,7 @@ class Trainer:
         self.ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
 
         #K total number of steps
-        #Ska inte K = 2^(20) ?
-        K = epochs*(len(labeled)+len(unlabeled_dataloader))/self.batch_size
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
-        #cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
-        #scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
-        #scheduler = self.get_cosine_schedule_with_warmup(optimizer, 0, K)
         scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
 
         # set the wanted loss function to criterion
@@ -290,8 +270,6 @@ class Trainer:
                 for j, (X, U) in enumerate(current_dataloader):
 
                     if session == "training":
-                        # k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
-                        k = e * (len(labeled) + len(unlabeled_dataloader)) / self.batch_size + j
                         batch_X, label_X = X
                         weak_a, strong_a = U
 
