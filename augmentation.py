@@ -27,24 +27,24 @@ class Wrapper:
 
 
 def weak_augment(batch):
-    torchvision.utils.save_image(batch[0], "img_weak_1.png")
+    #torchvision.utils.save_image(batch[0], "img_weak_1.png")
 
     weak_transform = get_weak_transform()
 
     for i in range(len(batch)):
         batch[i] = weak_transform(batch[i].cpu())
 
-    torchvision.utils.save_image(batch[0], "img_weak_aug.png")
+    #torchvision.utils.save_image(batch[0], "img_weak_aug.png")
     return batch
 
 def get_weak_transform():
     weak_transform = torchvision.transforms.Compose([
         #torchvision.transforms.Normalize((-0.5/0.5, -0.5/0.5, -0.5/0.5), (1/0.5, 1/0.5, 1/0.5)),
-        torchvision.transforms.functional.to_pil_image,
+        #torchvision.transforms.functional.to_pil_image,
         torchvision.transforms.RandomHorizontalFlip(p=0.5),
         torchvision.transforms.RandomAffine(0, translate=(0.0625, 0.0625)),
         torchvision.transforms.functional.to_tensor,
-        #torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     return weak_transform
 
@@ -53,7 +53,7 @@ def get_weak_transform():
 
 
 def strong_augment(batch, dataset_name):
-    torchvision.utils.save_image(batch[0], "img_strog_1.png")
+    #torchvision.utils.save_image(batch[0], "img_strog_1.png")
 
     strong_transform = get_strong_transform(dataset_name)
 
@@ -62,17 +62,17 @@ def strong_augment(batch, dataset_name):
 
         #cutout(batch[i], cutout_hight, cutout_width)
 
-    torchvision.utils.save_image(batch[0], "img_strog_aug.png")
+    #torchvision.utils.save_image(batch[0], "img_strog_aug.png")
     return batch
     
 def get_strong_transform(dataset_name):
     strong_transform = torchvision.transforms.Compose([
         #torchvision.transforms.Normalize((-0.5 / 0.5, -0.5 / 0.5, -0.5 / 0.5), (1 / 0.5, 1 / 0.5, 1 / 0.5)),
-        torchvision.transforms.functional.to_pil_image,
+        #torchvision.transforms.functional.to_pil_image,
         RandAugment(),
         torchvision.transforms.functional.to_tensor,
         cutout_transform(dataset_name)
-        #torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     return strong_transform
 
