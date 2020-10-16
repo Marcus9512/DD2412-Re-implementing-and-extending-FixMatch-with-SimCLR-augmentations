@@ -7,7 +7,7 @@ import torch.utils.tensorboard as tb
 import numpy as np
 import sys
 
-from torch.optim.lr_scheduler import LambdaLR
+from cosine_annealing import LegacyCosineAnnealingLR
 from os import path
 from datetime import datetime
 from Custom_dataset import Labeled_Unlabeled_dataset as lu
@@ -258,7 +258,8 @@ class Trainer:
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
         #cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
         #scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
-        scheduler = self.get_cosine_schedule_with_warmup(optimizer, 0, K)
+        #scheduler = self.get_cosine_schedule_with_warmup(optimizer, 0, K)
+        scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
 
         # set the wanted loss function to criterion
         criterion_X = self.loss_function
