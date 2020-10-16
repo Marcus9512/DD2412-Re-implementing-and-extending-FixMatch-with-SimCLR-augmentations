@@ -9,6 +9,8 @@ import torchvision
 import torch.nn as nn
 import torchvision.transforms as transforms
 from Models.Wideresnet import *
+from Custom_dataset.Unlabeled_dataset import *
+from augmentation import  *
 
 from Trainer import *
 
@@ -21,7 +23,7 @@ def get_normalization():
     https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
     :return:
     '''
-    return transforms.Compose([transforms.ToTensor()])#transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])#
 
 def get_dataset(arg):
     '''
@@ -30,9 +32,10 @@ def get_dataset(arg):
     :return:
     '''
 
-    def get_return_format(train, test, num_classes, name):
+    def get_return_format(train, test, unlabeled, num_classes, name):
         return {
             "train_set": train,
+            "unlabeled": unlabeled,
             "test_set": test,
             "num_classes": num_classes,
             "name": name
@@ -44,7 +47,10 @@ def get_dataset(arg):
         # Based from pytorch Cifar10, https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
         train = torchvision.datasets.CIFAR10(root='./Data', train=True, download=True, transform = transform)
         test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform = transform)
-        return get_return_format(train, test, 10, "CIFAR10")
+        unlabeled = Unlabeled_dataset_cifar(root='./Unlabeled', train=True, download=True,
+                                            transform= Wrapper(get_weak_transform(), get_strong_transform("CIFAR10")))
+
+        return get_return_format(train, test, unlabeled, 10, "CIFAR10")
 
     elif arg.lower() == "cifar100":
         train = torchvision.datasets.CIFAR100(root='./Data', train=True, download=True, transform = transform)
@@ -72,7 +78,7 @@ if __name__ == "__main__":
     model = Wide_ResNet(28, 2, 0.3, 10)
     loss_function = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset, loss_function, batch_size=64)
-    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=50, num_labels=250)
+    trainer = Trainer(dataset, loss_function, batch_size=64, mu=6)
+    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=50, num_labels=400, threshold=0.95)
     trainer.test(path, model)
     trainer.close_summary()

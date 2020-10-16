@@ -71,7 +71,7 @@ def get_strong_transform(dataset_name):
         #torchvision.transforms.functional.to_pil_image,
         RandAugment(),
         torchvision.transforms.functional.to_tensor,
-        cutout_transform(dataset_name)
+        cutout_transform(dataset_name),
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     return strong_transform
