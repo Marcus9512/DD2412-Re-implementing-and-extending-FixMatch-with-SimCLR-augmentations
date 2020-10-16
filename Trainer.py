@@ -21,7 +21,7 @@ LOGGER_NAME = "Trainer"
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function, batch_size=10, mu=7, use_gpu=True, workers=1):
+    def __init__(self, dataset, loss_function, batch_size=10, mu=7, use_gpu=True, workers=4):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -178,6 +178,21 @@ class Trainer:
         self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
         self.logger.info(f"\t Number of labels:\t{num_labels}")
 
+    def get_cosine_schedule_with_warmup(self,optimizer,
+                                        num_warmup_steps,
+                                        num_training_steps,
+                                        num_cycles=7. / 16.,
+                                        last_epoch=-1):
+        import math
+        def _lr_lambda(current_step):
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            no_progress = float(current_step - num_warmup_steps) / \
+                          float(max(1, num_training_steps - num_warmup_steps))
+            return max(0., math.cos(math.pi * num_cycles * no_progress))
+
+        return LambdaLR(optimizer, _lr_lambda, last_epoch)
+
     def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
         '''
 
@@ -241,8 +256,9 @@ class Trainer:
         #Ska inte K = 2^(20) ?
         K = epochs*(len(labeled)+len(unlabeled_dataloader))/self.batch_size
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
-        cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
-        scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
+        #cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
+        #scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
+        scheduler = self.get_cosine_schedule_with_warmup(optimizer, 0, K)
 
         # set the wanted loss function to criterion
         criterion_X = self.loss_function
@@ -278,8 +294,13 @@ class Trainer:
                         batch_X, label_X = X
                         weak_a, strong_a = U
 
-                        self.logger.info(f"batch_X {batch_X.shape}")
-                        self.logger.info(f"Label_X {label_X.shape}")
+                        #self.imshow(torchvision.utils.make_grid(batch_X))
+                        #self.imshow(torchvision.utils.make_grid(weak_a))
+                        #print('GroundTruth: ', label_X)
+                        #exit()
+
+                        #self.logger.info(f"batch_X {batch_X.shape}")
+                        #self.logger.info(f"Label_X {label_X.shape}")
                         #self.logger.info(f"batch_U {batch_U.shape}")
 
                         #batch_U = torch.cat(batch_U)
@@ -349,6 +370,13 @@ class Trainer:
                 self.summary.add_scalar('Loss/' + session, combined_loss, e)
 
         return self.save_network(model)
+
+    def imshow(self, img):
+        import matplotlib.pyplot as plt
+        #img = img / 2 + 0.5  # unnormalize
+        npimg = img.numpy()
+        plt.imshow(np.transpose(npimg, (1, 2, 0)))
+        plt.show()
 
     def test(self, save_path, model):
         '''

@@ -23,7 +23,7 @@ def get_normalization():
     https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
     :return:
     '''
-    return transforms.Compose([transforms.ToTensor()])#transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])#
 
 def get_dataset(arg):
     '''
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     model = Wide_ResNet(28, 2, 0.3, 10)
     loss_function = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset, loss_function, batch_size=64, mu=1)
-    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=1, num_labels=4000, threshold=0.1)
+    trainer = Trainer(dataset, loss_function, batch_size=64, mu=6)
+    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=50, num_labels=400, threshold=0.95)
     trainer.test(path, model)
     trainer.close_summary()
