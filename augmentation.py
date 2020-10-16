@@ -2,17 +2,32 @@ import torchvision
 from randaugment import RandAugment
 import random
 
-def weak_augment(batch):
-    torchvision.utils.save_image(batch[0], "img_weak_1.png")
-
-    weak_transform = torchvision.transforms.Compose([
+weak_transform = torchvision.transforms.Compose([
         #torchvision.transforms.Normalize((-0.5/0.5, -0.5/0.5, -0.5/0.5), (1/0.5, 1/0.5, 1/0.5)),
-        torchvision.transforms.functional.to_pil_image,
         torchvision.transforms.RandomHorizontalFlip(p=0.5),
         torchvision.transforms.RandomAffine(0, translate=(0.0625, 0.0625)),
         torchvision.transforms.functional.to_tensor,
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
+
+strong_transform = torchvision.transforms.Compose([
+        #torchvision.transforms.Normalize((-0.5 / 0.5, -0.5 / 0.5, -0.5 / 0.5), (1 / 0.5, 1 / 0.5, 1 / 0.5)),
+        RandAugment(),
+        torchvision.transforms.functional.to_tensor,
+        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+
+
+class Wrapper:
+    def __init__(self, transform1, transform2):
+        self.transform1 = transform1
+        self.transform2 = transform2
+
+    def __call__(self, item):
+        return self.transform1(item), self.transform2(item)
+
+def weak_augment(batch):
+    torchvision.utils.save_image(batch[0], "img_weak_1.png")
 
     for i in range(len(batch)):
         batch[i] = weak_transform(batch[i].cpu())
@@ -24,13 +39,7 @@ def weak_augment(batch):
 def strong_augment(batch):
     torchvision.utils.save_image(batch[0], "img_strog_1.png")
 
-    strong_transform = torchvision.transforms.Compose([
-        #torchvision.transforms.Normalize((-0.5 / 0.5, -0.5 / 0.5, -0.5 / 0.5), (1 / 0.5, 1 / 0.5, 1 / 0.5)),
-        torchvision.transforms.functional.to_pil_image,
-        RandAugment(),
-        torchvision.transforms.functional.to_tensor,
-        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
+
 
     for i in range(len(batch)):
         batch[i] = strong_transform(batch[i].cpu())

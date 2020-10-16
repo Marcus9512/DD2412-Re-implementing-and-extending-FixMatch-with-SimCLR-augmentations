@@ -5,6 +5,8 @@ import torch.optim as opt
 import torch.utils.data as ut
 import torch.utils.tensorboard as tb
 import numpy as np
+import sys
+
 from torch.optim.lr_scheduler import LambdaLR
 from os import path
 from datetime import datetime
@@ -19,7 +21,7 @@ LOGGER_NAME = "Trainer"
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function, batch_size=10, mu=5, use_gpu=True, workers=4):
+    def __init__(self, dataset, loss_function, batch_size=10, mu=7, use_gpu=True, workers=4):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -116,6 +118,15 @@ class Trainer:
         return ut.DataLoader(l_u_dataset, batch_size=self.batch_size, shuffle=True,
                                          num_workers=self.workers, pin_memory=True)
 
+    def create_custom_dataloader2(self, label, unlabeled):
+        label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, shuffle=True,
+                                         num_workers=self.workers, pin_memory=True)
+        unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size * self.mu, shuffle=True,
+                                             num_workers=self.workers, pin_memory=True)
+
+        self.logger.info(f"Labeled length: {len(label_dataloader)}, unlabeled length: {len(unlabeled_dataloader)}")
+        return label_dataloader, unlabeled_dataloader
+
     def validate_directory(self, save_path):
         '''
         Makes sure that the directory under save_path exists, otherwise creates it.
@@ -167,6 +178,21 @@ class Trainer:
         self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
         self.logger.info(f"\t Number of labels:\t{num_labels}")
 
+    def get_cosine_schedule_with_warmup(self,optimizer,
+                                        num_warmup_steps,
+                                        num_training_steps,
+                                        num_cycles=7. / 16.,
+                                        last_epoch=-1):
+        import math
+        def _lr_lambda(current_step):
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            no_progress = float(current_step - num_warmup_steps) / \
+                          float(max(1, num_training_steps - num_warmup_steps))
+            return max(0., math.cos(math.pi * num_cycles * no_progress))
+
+        return LambdaLR(optimizer, _lr_lambda, last_epoch)
+
     def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
         '''
 
@@ -191,13 +217,24 @@ class Trainer:
         # The formula represents the percent amount of data to unlabeled data
         #labeled, unlabeled = self.split_dataset(train, self.mu / (1 + self.mu))
 
-        labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], num_labels)
-        val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
+        trainset = self.dataset["train_set"]
+
+        self.logger.info(f"Dataset length: {len(trainset)}")
+
+        labeled, rest = self.split_labels_per_class(self.dataset["train_set"], num_labels)
+        #val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
+
+        self.logger.info(f"labeled len {len(labeled)} rest len {len(rest)}")
 
         # Create dataloaders for each part of the dataset
-        train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
-        val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
+        #train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
+        label_dataloader, val_dataloader = self.create_custom_dataloader2(labeled, rest)
+
+        unlabeled_dataloader = ut.DataLoader(self.dataset["unlabeled"], batch_size=self.batch_size*self.mu, shuffle=True,
                                        num_workers=self.workers, pin_memory=True)
+
+        #val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
+        #                               num_workers=self.workers, pin_memory=True)
         '''
         TO VERIFY NUMBER OF LABELS
         store = np.zeros(10)
@@ -212,44 +249,63 @@ class Trainer:
         exit(-1)
         '''
         # select optimizer type, current is SGD
-        optimizer = opt.SGD(model.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)
+        optimizer = opt.SGD(model.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum, nesterov=True)
         self.ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
 
         #K total number of steps
         #Ska inte K = 2^(20) ?
-        K = epochs*(len(labeled)+len(unlabeled))/self.batch_size
+        K = epochs*(len(labeled)+len(unlabeled_dataloader))/self.batch_size
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
-        cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
-        scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
+        #cos_weight_decay = lambda k: learn_rate*np.cos(7*np.pi*k/(16*K))
+        #scheduler = LambdaLR(optimizer,lr_lambda=cos_weight_decay)
+        scheduler = self.get_cosine_schedule_with_warmup(optimizer, 0, K)
 
         # set the wanted loss function to criterion
         criterion_X = self.loss_function
         criterion_U = self.loss_function
 
+        model.train()
         for e in trange(epochs):
             self.logger.info(f"Epoch {e} of {epochs}")
 
             for session in ["training", "validation"]:
                 if session == "training":
-                    current_dataloader = train_dataloader
+                    current_dataloader = zip(label_dataloader, unlabeled_dataloader)
+                    length = min(len(label_dataloader), len(unlabeled_dataloader))
+                    #print("length ",length)
+
+                    #a = len(list(current_dataloader))
+                    #print("list ", a)
+                    #assert a == length
                     model.train()
                 else:
                     current_dataloader = val_dataloader
+                    length = len(val_dataloader)
                     model.eval()
 
                 combined_loss = 0
                 i = 0
-                pbar = tqdm(total=len(current_dataloader))
+                pbar = tqdm(total=length)
                 for j, (X, U) in enumerate(current_dataloader):
 
                     if session == "training":
-                        #k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
-                        k = e*(len(labeled)+len(unlabeled))/self.batch_size+j
+                        # k = e*(len(labeled)+len(unlabeled))+j*self.batch_size
+                        k = e * (len(labeled) + len(unlabeled_dataloader)) / self.batch_size + j
                         batch_X, label_X = X
-                        batch_U = U
-                        batch_U = torch.cat(batch_U)
+                        weak_a, strong_a = U
+
+                        #self.imshow(torchvision.utils.make_grid(batch_X))
+                        #self.imshow(torchvision.utils.make_grid(weak_a))
+                        #print('GroundTruth: ', label_X)
+                        #exit()
+
+                        #self.logger.info(f"batch_X {batch_X.shape}")
+                        #self.logger.info(f"Label_X {label_X.shape}")
+                        #self.logger.info(f"batch_U {batch_U.shape}")
+
+                        #batch_U = torch.cat(batch_U)
                         # Send unlabeled sample to GPU or CPU
-                        batch_U = batch_U.to(device=self.main_device)
+                        #batch_U = batch_U.to(device=self.main_device)
                     else:
                         # Verification have no unlabeled dataset
                         batch_X, label_X = (X, U)
@@ -265,28 +321,36 @@ class Trainer:
                         out_X = model(batch_X)
                         loss_X = criterion_X(out_X, label_X)
 
-                        input_U_wa = weak_augment(batch_U)
-                        out_U_wa = model(input_U_wa)
+                        label_X.detach()
+                        batch_X.detach()
+
+                        #input_U_wa = weak_augment(batch_U).to(device=self.main_device)
+                        weak_a = weak_a.to(device=self.main_device)
+                        out_U_wa = model(weak_a)
+
+                        weak_a.detach()
 
                         with torch.no_grad():
-                            #calc classification of wa data and detach the calculation from the training
+                            # calc classification of wa data and detach the calculation from the training
                             pseudo_labels = torch.softmax(out_U_wa, dim=1)
-                            #take out the highest values for each class and create a mask
+                            # take out the highest values for each class and create a mask
                             probs, labels_U = torch.max(pseudo_labels, dim=1)
                             mask = probs.ge(threshold).float()
 
-                        input_U_sa = strong_augment(batch_U)
-                        out_U_sa = model(input_U_sa)
-                        loss_U = torch.mean(criterion_U(out_U_sa,labels_U)*mask)
- 
-                        loss = loss_X + lambda_U*loss_U
+                        #input_U_sa = strong_augment(batch_U).to(device=self.main_device)
+                        strong_a = strong_a.to(device=self.main_device)
+                        out_U_sa = model(strong_a)
+                        loss_U = torch.mean(criterion_U(out_U_sa, labels_U) * mask)
+
+                        strong_a.detach()
+
+                        loss = loss_X + lambda_U * loss_U
                     else:
                         # Disable gradient modifications
                         with torch.no_grad():
                             out = model(batch_X)
 
                             loss = criterion_X(out, label_X)
-
 
                     combined_loss += loss.item()
 
@@ -306,6 +370,13 @@ class Trainer:
                 self.summary.add_scalar('Loss/' + session, combined_loss, e)
 
         return self.save_network(model)
+
+    def imshow(self, img):
+        import matplotlib.pyplot as plt
+        #img = img / 2 + 0.5  # unnormalize
+        npimg = img.numpy()
+        plt.imshow(np.transpose(npimg, (1, 2, 0)))
+        plt.show()
 
     def test(self, save_path, model):
         '''
@@ -353,4 +424,7 @@ Code graveyard
     self.logger.info(f"Labeled {len(label_dataloader)}, Unlabeled {len(unlabeled_dataloader)}")
     assert len(label_dataloader) == len(unlabeled_dataloader)
     return zip(label_dataloader, unlabeled_dataloader)
+    
+    
+     
 '''
