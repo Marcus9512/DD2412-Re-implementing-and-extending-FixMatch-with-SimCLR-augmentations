@@ -48,7 +48,7 @@ def get_dataset(arg):
         train = torchvision.datasets.CIFAR10(root='./Data', train=True, download=True, transform = transform)
         test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform = transform)
         unlabeled = Unlabeled_dataset_cifar(root='./Unlabeled', train=True, download=True,
-                                            transform= Wrapper(weak_transform, strong_transform))
+                                            transform= Wrapper(get_weak_transform(), get_strong_transform("CIFAR10")))
 
         return get_return_format(train, test, unlabeled, 10, "CIFAR10")
 
