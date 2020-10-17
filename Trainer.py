@@ -1,6 +1,7 @@
 import os
 import math
 import logging
+import torch
 import torch.optim as opt
 import torch.utils.data as ut
 import torch.utils.tensorboard as tb
@@ -294,32 +295,37 @@ class Trainer:
                         # Verification have no unlabeled dataset
                         batch_X, label_X = (X, U)
 
-                    print(batch_X.is_cuda)
-                    print(label_X.is_cuda)
+                    #print(batch_X.is_cuda)
+                    #print(label_X.is_cuda)
                     # Send sample and label to GPU or CPU
                     batch_X = batch_X.to(device=self.main_device)
 
                     label_X = label_X.to(device=self.main_device)
-                    print(batch_X.is_cuda)
-                    print(label_X.is_cuda)
+
+                    torch.cuda.empty_cache()
+                    #print(batch_X.is_cuda)
+                    #print(label_X.is_cuda)
                     if session == "training":
                         # Reset gradients between training
                         optimizer.zero_grad()
                         out_X = model(batch_X)
                         loss_X = criterion_X(out_X, label_X)
 
+                        loss_X.detach()
                         label_X.detach()
-                        batch_X.detach()
+                        del batch_X
 
                         #input_U_wa = weak_augment(batch_U).to(device=self.main_device)
                         weak_a = weak_a.to(device=self.main_device)
                         out_U_wa = model(weak_a)
 
-                        weak_a.detach()
+                        del weak_a
 
                         with torch.no_grad():
                             # calc classification of wa data and detach the calculation from the training
                             pseudo_labels = torch.softmax(out_U_wa, dim=1)
+
+                            del out_U_wa
                             # take out the highest values for each class and create a mask
                             probs, labels_U = torch.max(pseudo_labels, dim=1)
                             mask = probs.ge(threshold).float()
@@ -329,7 +335,10 @@ class Trainer:
                         out_U_sa = model(strong_a)
                         loss_U = torch.mean(criterion_U(out_U_sa, labels_U) * mask)
 
-                        strong_a.detach()
+                        del strong_a
+                        del out_U_sa
+
+                        loss_U.detach()
 
                         loss = loss_X + lambda_U * loss_U
                     else:
