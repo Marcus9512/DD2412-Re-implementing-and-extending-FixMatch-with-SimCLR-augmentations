@@ -243,7 +243,7 @@ class Trainer:
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
         K =  min(len(label_dataloader), len(unlabeled_dataloader)) * epochs
         #scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
-        
+
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
         scheduler = self.cosine_leraning(optimizer, cosin)
 

@@ -7,7 +7,9 @@ If you want more information about the available GPU install pycuda by:
 *Note* pycuda requiers [CUDA](https://developer.nvidia.com/cuda-downloads) and [Visual Studio](https://visualstudio.microsoft.com/)
 
 ## Run the network
-* Run `python Driver.py` with argument `--dataset=CIFAR10`
+* Run `python Driver.py`
+* Arguments, dataset is the only required argument `--dataset, --mu, --batch_size, --epochs, --num_labels`
+* Available datasets `CIFAR10 and CIFAR100`
 
 ## Tensorboard
 * You need tensorflow installed `pip install tensorflow`
