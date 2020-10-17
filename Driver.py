@@ -68,6 +68,7 @@ if __name__ == "__main__":
     parser.add_argument("--mu", type=int, help="Value for mu", default=7)
     parser.add_argument("--batch_size", type=int, help="Batch size", default=64)
     parser.add_argument("--epochs", type=int, help="number of epochs", default=1)
+    parser.add_argument("--num_labels", type=int, help="number of labels", default=400)
 
     args = parser.parse_args()
     logger.info(f"Selected dataset: {args.dataset}")

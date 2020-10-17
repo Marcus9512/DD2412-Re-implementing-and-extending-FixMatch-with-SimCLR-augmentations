@@ -243,8 +243,8 @@ class Trainer:
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
         K =  min(len(label_dataloader), len(unlabeled_dataloader)) * epochs
         #scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
+        
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
-
         scheduler = self.cosine_leraning(optimizer, cosin)
 
         # set the wanted loss function to criterion
@@ -259,11 +259,6 @@ class Trainer:
                 if session == "training":
                     current_dataloader = zip(label_dataloader, unlabeled_dataloader)
                     length = min(len(label_dataloader), len(unlabeled_dataloader))
-                    #print("length ",length)
-
-                    #a = len(list(current_dataloader))
-                    #print("list ", a)
-                    #assert a == length
                     model.train()
                 else:
                     current_dataloader = val_dataloader
@@ -282,29 +277,19 @@ class Trainer:
                         #self.imshow(torchvision.utils.make_grid(batch_X))
                         #self.imshow(torchvision.utils.make_grid(weak_a))
                         #print('GroundTruth: ', label_X)
-                        #exit()
-
-                        #self.logger.info(f"batch_X {batch_X.shape}")
-                        #self.logger.info(f"Label_X {label_X.shape}")
-                        #self.logger.info(f"batch_U {batch_U.shape}")
-
-                        #batch_U = torch.cat(batch_U)
-                        # Send unlabeled sample to GPU or CPU
-                        #batch_U = batch_U.to(device=self.main_device)
                     else:
                         # Verification have no unlabeled dataset
                         batch_X, label_X = (X, U)
 
-                    #print(batch_X.is_cuda)
-                    #print(label_X.is_cuda)
+
                     # Send sample and label to GPU or CPU
                     batch_X = batch_X.to(device=self.main_device)
 
                     label_X = label_X.to(device=self.main_device)
 
+                    # Empty cuda cache to avoid memory issues
                     torch.cuda.empty_cache()
-                    #print(batch_X.is_cuda)
-                    #print(label_X.is_cuda)
+
                     if session == "training":
                         # Reset gradients between training
                         optimizer.zero_grad()
@@ -313,6 +298,8 @@ class Trainer:
 
                         loss_X.detach()
                         label_X.detach()
+
+                        # remove from vram
                         del batch_X
 
                         #input_U_wa = weak_augment(batch_U).to(device=self.main_device)
@@ -325,6 +312,7 @@ class Trainer:
                             # calc classification of wa data and detach the calculation from the training
                             pseudo_labels = torch.softmax(out_U_wa, dim=1)
 
+                            # remove from vram
                             del out_U_wa
                             # take out the highest values for each class and create a mask
                             probs, labels_U = torch.max(pseudo_labels, dim=1)
@@ -335,6 +323,7 @@ class Trainer:
                         out_U_sa = model(strong_a)
                         loss_U = torch.mean(criterion_U(out_U_sa, labels_U) * mask)
 
+                        # remove from vram
                         del strong_a
                         del out_U_sa
 
