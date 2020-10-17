@@ -3,7 +3,7 @@ Driver class for the network.
 Our "main" method.
 '''
 
-import logging
+import time
 import argparse
 import torchvision
 import torch.nn as nn
@@ -82,7 +82,9 @@ if __name__ == "__main__":
     model = Wide_ResNet(28, 2, 0.3, 10)
     loss_function = nn.CrossEntropyLoss()
 
+    timestamp = time.time()
     trainer = Trainer(dataset, loss_function, batch_size=args.batch_size, mu=args.mu)
     path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=args.epochs, num_labels=400, threshold=0.95)
     trainer.test(path, model)
     trainer.close_summary()
+    logger.info(f"Time to complete training and test {time.time() - timestamp}seconds")
