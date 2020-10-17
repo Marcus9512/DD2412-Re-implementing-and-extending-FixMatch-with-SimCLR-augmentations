@@ -65,6 +65,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, help="Which dataset should be used, supported: CIFAR10", required=True)
+    parser.add_argument("--mu", type=int, help="Value for mu", default=7)
+    parser.add_argument("--batch_size", type=int, help="Batch size", default=64)
+    parser.add_argument("--epochs", type=int, help="number of epochs", default=1)
+
     args = parser.parse_args()
     logger.info(f"Selected dataset: {args.dataset}")
 
@@ -78,7 +82,7 @@ if __name__ == "__main__":
     model = Wide_ResNet(28, 2, 0.3, 10)
     loss_function = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset, loss_function, batch_size=64, mu=6)
-    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=50, num_labels=400, threshold=0.95)
+    trainer = Trainer(dataset, loss_function, batch_size=args.batch_size, mu=args.mu)
+    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=args.epochs, num_labels=400, threshold=0.95)
     trainer.test(path, model)
     trainer.close_summary()

@@ -1,11 +1,9 @@
 import os
-import torch
+import math
 import logging
 import torch.optim as opt
 import torch.utils.data as ut
 import torch.utils.tensorboard as tb
-import numpy as np
-import sys
 
 from cosine_annealing import LegacyCosineAnnealingLR
 from os import path
@@ -178,6 +176,9 @@ class Trainer:
         self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
         self.logger.info(f"\t Number of labels:\t{num_labels}")
 
+    def cosine_leraning(self, optimizer, function):
+        return opt.lr_scheduler.LambdaLR(optimizer, function)
+
     def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
         '''
 
@@ -239,7 +240,11 @@ class Trainer:
 
         #K total number of steps
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
-        scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
+        K =  min(len(label_dataloader), len(unlabeled_dataloader)) * epochs
+        #scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
+        cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
+
+        scheduler = self.cosine_leraning(optimizer, cosin)
 
         # set the wanted loss function to criterion
         criterion_X = self.loss_function
@@ -289,11 +294,14 @@ class Trainer:
                         # Verification have no unlabeled dataset
                         batch_X, label_X = (X, U)
 
+                    print(batch_X.is_cuda)
+                    print(label_X.is_cuda)
                     # Send sample and label to GPU or CPU
                     batch_X = batch_X.to(device=self.main_device)
 
                     label_X = label_X.to(device=self.main_device)
-
+                    print(batch_X.is_cuda)
+                    print(label_X.is_cuda)
                     if session == "training":
                         # Reset gradients between training
                         optimizer.zero_grad()
