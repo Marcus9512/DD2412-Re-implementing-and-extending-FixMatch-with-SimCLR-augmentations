@@ -69,6 +69,10 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="Batch size", default=64)
     parser.add_argument("--epochs", type=int, help="number of epochs", default=1)
     parser.add_argument("--num_labels", type=int, help="number of labels", default=400)
+    parser.add_argument("--checkpoint_ratio", type=int, help="How often should the network backup the training", default=50)
+    parser.add_argument("--resume", type=str, help="Resume training, path to file",
+                        default=None)
+    parser.add_argument("--workers", type=int, help="Number of workers, higher values could give better performance, however, requiers more VRAM", default=4)
 
     args = parser.parse_args()
     logger.info(f"Selected dataset: {args.dataset}")
@@ -84,8 +88,8 @@ if __name__ == "__main__":
     loss_function = nn.CrossEntropyLoss()
 
     timestamp = time.time()
-    trainer = Trainer(dataset, loss_function, batch_size=args.batch_size, mu=args.mu)
-    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=args.epochs, num_labels=400, threshold=0.95)
+    trainer = Trainer(dataset, loss_function, batch_size=args.batch_size, mu=args.mu, workers=args.workers)
+    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=args.epochs, num_labels=400, threshold=0.95, resume_path=args.resume, checkpoint_ratio=args.checkpoint_ratio)
     trainer.test(path, model)
     trainer.close_summary()
     logger.info(f"Time to complete training and test {time.time() - timestamp}seconds")
