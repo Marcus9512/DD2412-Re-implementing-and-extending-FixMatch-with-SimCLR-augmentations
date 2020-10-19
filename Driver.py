@@ -47,7 +47,7 @@ def get_dataset(arg):
         # Based from pytorch Cifar10, https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
         train = torchvision.datasets.CIFAR10(root='./Data', train=True, download=True, transform = transform)
         test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform = transform)
-        unlabeled = Unlabeled_dataset_cifar(root='./Unlabeled', train=True, download=True,
+        unlabeled = Unlabeled_dataset_cifar10(root='./Unlabeled', train=True, download=True,
                                             transform= Wrapper(get_weak_transform(), get_strong_transform("CIFAR10")))
 
         return get_return_format(train, test, unlabeled, 10, "CIFAR10")
@@ -55,7 +55,9 @@ def get_dataset(arg):
     elif arg.lower() == "cifar100":
         train = torchvision.datasets.CIFAR100(root='./Data', train=True, download=True, transform = transform)
         test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform = transform)
-        return get_return_format(train, test, 100, "CIFAR100")
+        unlabeled = Unlabeled_dataset_cifar100(root='./Unlabeled', train=True, download=True,
+                                              transform=Wrapper(get_weak_transform(), get_strong_transform("CIFAR100")))
+        return get_return_format(train, test, unlabeled, 100, "CIFAR100")
 
     return None
 
