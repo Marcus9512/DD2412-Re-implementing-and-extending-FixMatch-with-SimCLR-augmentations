@@ -177,7 +177,7 @@ class Trainer:
         self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
         self.logger.info(f"\t Number of labels:\t{num_labels}")
 
-    def cosine_leraning(self, optimizer, function):
+    def cosine_learning(self, optimizer, function):
         return opt.lr_scheduler.LambdaLR(optimizer, function)
 
     def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
@@ -245,7 +245,7 @@ class Trainer:
         #scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
 
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
-        scheduler = self.cosine_leraning(optimizer, cosin)
+        scheduler = self.cosine_learning(optimizer, cosin)
 
         # set the wanted loss function to criterion
         criterion_X = self.loss_function
