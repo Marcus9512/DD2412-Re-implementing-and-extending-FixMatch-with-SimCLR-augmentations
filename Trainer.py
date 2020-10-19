@@ -1,11 +1,10 @@
 import os
-import torch
+import math
 import logging
+import torch
 import torch.optim as opt
 import torch.utils.data as ut
 import torch.utils.tensorboard as tb
-import numpy as np
-import sys
 
 from cosine_annealing import LegacyCosineAnnealingLR
 from os import path
@@ -178,6 +177,9 @@ class Trainer:
         self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
         self.logger.info(f"\t Number of labels:\t{num_labels}")
 
+    def cosine_learning(self, optimizer, function):
+        return opt.lr_scheduler.LambdaLR(optimizer, function)
+
     def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
         '''
 
@@ -239,7 +241,11 @@ class Trainer:
 
         #K total number of steps
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
-        scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
+        K =  min(len(label_dataloader), len(unlabeled_dataloader)) * epochs
+        #scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
+
+        cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
+        scheduler = self.cosine_learning(optimizer, cosin)
 
         # set the wanted loss function to criterion
         criterion_X = self.loss_function
@@ -253,11 +259,6 @@ class Trainer:
                 if session == "training":
                     current_dataloader = zip(label_dataloader, unlabeled_dataloader)
                     length = min(len(label_dataloader), len(unlabeled_dataloader))
-                    #print("length ",length)
-
-                    #a = len(list(current_dataloader))
-                    #print("list ", a)
-                    #assert a == length
                     model.train()
                 else:
                     current_dataloader = val_dataloader
@@ -276,23 +277,18 @@ class Trainer:
                         #self.imshow(torchvision.utils.make_grid(batch_X))
                         #self.imshow(torchvision.utils.make_grid(weak_a))
                         #print('GroundTruth: ', label_X)
-                        #exit()
-
-                        #self.logger.info(f"batch_X {batch_X.shape}")
-                        #self.logger.info(f"Label_X {label_X.shape}")
-                        #self.logger.info(f"batch_U {batch_U.shape}")
-
-                        #batch_U = torch.cat(batch_U)
-                        # Send unlabeled sample to GPU or CPU
-                        #batch_U = batch_U.to(device=self.main_device)
                     else:
                         # Verification have no unlabeled dataset
                         batch_X, label_X = (X, U)
+
 
                     # Send sample and label to GPU or CPU
                     batch_X = batch_X.to(device=self.main_device)
 
                     label_X = label_X.to(device=self.main_device)
+
+                    # Empty cuda cache to avoid memory issues
+                    torch.cuda.empty_cache()
 
                     if session == "training":
                         # Reset gradients between training
@@ -300,18 +296,24 @@ class Trainer:
                         out_X = model(batch_X)
                         loss_X = criterion_X(out_X, label_X)
 
+                        loss_X.detach()
                         label_X.detach()
-                        batch_X.detach()
+
+                        # remove from vram
+                        del batch_X
 
                         #input_U_wa = weak_augment(batch_U).to(device=self.main_device)
                         weak_a = weak_a.to(device=self.main_device)
                         out_U_wa = model(weak_a)
 
-                        weak_a.detach()
+                        del weak_a
 
                         with torch.no_grad():
                             # calc classification of wa data and detach the calculation from the training
                             pseudo_labels = torch.softmax(out_U_wa, dim=1)
+
+                            # remove from vram
+                            del out_U_wa
                             # take out the highest values for each class and create a mask
                             probs, labels_U = torch.max(pseudo_labels, dim=1)
                             mask = probs.ge(threshold).float()
@@ -321,7 +323,11 @@ class Trainer:
                         out_U_sa = model(strong_a)
                         loss_U = torch.mean(criterion_U(out_U_sa, labels_U) * mask)
 
-                        strong_a.detach()
+                        # remove from vram
+                        del strong_a
+                        del out_U_sa
+
+                        loss_U.detach()
 
                         loss = loss_X + lambda_U * loss_U
                     else:
