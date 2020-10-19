@@ -162,11 +162,20 @@ class Trainer:
 
         return final_path
 
+    def save_checkpoint(self, current_state, name):
+        save_path = os.path.dirname("Data")
+        save_path = os.path.join(save_path, "Saved_checkpoints")
+        self.validate_directory(save_path)
+        final_path = save_path + "/" + name
+        self.logger.info(f"Saving checkpoint at {final_path}")
+        torch.save(current_state, final_path)
+
+
     def close_summary(self):
         self.summary.flush()
         self.summary.close()
 
-    def log_information(self, learn_rate, weight_decay, momentum, epochs, percent_to_validation, num_labels):
+    def log_information(self, learn_rate, weight_decay, momentum, epochs, percent_to_validation, num_labels, checkpoint_ratio, resume_path):
         self.logger.info(f"---------------Training model---------------")
         self.logger.info(f"\t Batch size:\t\t{self.batch_size}")
         self.logger.info(f"\t Mu:\t\t\t{self.mu}")
@@ -176,11 +185,14 @@ class Trainer:
         self.logger.info(f"\t Epochs:\t\t{epochs}")
         self.logger.info(f"\t Validation percent:\t{percent_to_validation}")
         self.logger.info(f"\t Number of labels:\t{num_labels}")
+        self.logger.info(f"\t Checkpoint ratio:\t{checkpoint_ratio}")
+        self.logger.info(f"\t Resume path:\t{resume_path}")
+
 
     def cosine_learning(self, optimizer, function):
         return opt.lr_scheduler.LambdaLR(optimizer, function)
 
-    def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9):
+    def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9, checkpoint_ratio=None, resume_path=None):
         '''
 
         :param model:
@@ -194,7 +206,7 @@ class Trainer:
         :return: a path of the saved model
         '''
 
-        self.log_information(learn_rate, weight_decay, momentum, epochs, percent_to_validation, num_labels)
+        self.log_information(learn_rate, weight_decay, momentum, epochs, percent_to_validation, num_labels, checkpoint_ratio, resume_path)
 
         # set model to GPU or CPU
         model.to(self.main_device)
@@ -247,12 +259,28 @@ class Trainer:
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
         scheduler = self.cosine_learning(optimizer, cosin)
 
+        start_epoch = 0
+
+        # Load checkpoint
+        if resume_path != None:
+            if os.path.isfile(resume_path):
+                self.logger.info(f"RESUMING network")
+                #model, optimizer, start_epoch, scheduler = self.load_checkpoint(resume_path, model, optimizer, scheduler)
+                checkpoint = torch.load(resume_path)
+                model.load_state_dict(checkpoint['network'])
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                scheduler.load_state_dict(checkpoint['scheduler'])
+                start_epoch = checkpoint['epoch']
+            else:
+                self.logger.warn(f"CANT LOAD CHECKPOINT")
+                exit()
+
         # set the wanted loss function to criterion
         criterion_X = self.loss_function
         criterion_U = self.loss_function
 
         model.train()
-        for e in trange(epochs):
+        for e in range(start_epoch, epochs):
             self.logger.info(f"Epoch {e} of {epochs}")
 
             for session in ["training", "validation"]:
@@ -350,9 +378,19 @@ class Trainer:
 
                     i += label_X.size(0)
                     pbar.update(1)
+
                 combined_loss /= i
                 self.logger.info(f"{session} loss: {combined_loss}")
                 self.summary.add_scalar('Loss/' + session, combined_loss, e)
+
+            if e % checkpoint_ratio == 0:
+                checkpoint = {
+                    'epoch': e+1,
+                    'network': model.state_dict(),
+                    'scheduler': scheduler.state_dict(),
+                    'optimizer': optimizer.state_dict()
+                }
+                self.save_checkpoint(checkpoint, self.dataset["name"]+"_mu="+str(self.mu)+"_batch="+str(self.batch_size)+"_epoch="+str(e)+".pt.tar")
 
         return self.save_network(model)
 
