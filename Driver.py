@@ -69,7 +69,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, help="Which dataset should be used, supported: CIFAR10", required=True)
     parser.add_argument("--mu", type=int, help="Value for mu", default=7)
     parser.add_argument("--batch_size", type=int, help="Batch size", default=64)
-    parser.add_argument("--epochs", type=int, help="number of epochs", default=1)
+    parser.add_argument("--epochs", type=int, help="number of epochs", default=200)
     parser.add_argument("--num_labels", type=int, help="number of labels", default=400)
     parser.add_argument("--checkpoint_ratio", type=int, help="How often should the network backup the training", default=50)
     parser.add_argument("--resume", type=str, help="Resume training, path to file",
