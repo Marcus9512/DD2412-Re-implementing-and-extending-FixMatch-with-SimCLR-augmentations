@@ -85,13 +85,24 @@ if __name__ == "__main__":
         logger.error(f"Could not find dataset: {args.dataset}, terminating program")
         exit(1)
 
+    if dataset["name"] == "CIFAR10":
+        weight_decay = 0.0005
+    elif dataset["name"] == "CIFAR100":
+        weight_decay = 0.001
+    else:
+        logger.info(f"No valid dataset")
+        exit(2)
+
+    num_classes = dataset["num_classes"]
+    logger.info(f"Num classes: {num_classes}")
+
     #model = torch.hub.load('pytorch/vision:v0.6.0', 'wideresnet50_2', pretrained=False, num_classes=10)
-    model = Wide_ResNet(28, 2, 0.3, 10)
+    model = Wide_ResNet(28, 2, 0.3, num_classes)
     loss_function = nn.CrossEntropyLoss()
 
     timestamp = time.time()
     trainer = Trainer(dataset, loss_function, batch_size=args.batch_size, mu=args.mu, workers=args.workers)
-    path = trainer.train(model, learn_rate=0.03, weight_decay=0.0005, momentum=1e-9, epochs=args.epochs, num_labels=args.num_labels, threshold=0.95, resume_path=args.resume, checkpoint_ratio=args.checkpoint_ratio)
+    path = trainer.train(model, learn_rate=0.03, weight_decay=weight_decay, momentum=1e-9, epochs=args.epochs, num_labels=args.num_labels, threshold=0.95, resume_path=args.resume, checkpoint_ratio=args.checkpoint_ratio)
     trainer.test(path, model)
     trainer.close_summary()
     logger.info(f"Time to complete training and test {time.time() - timestamp}seconds")

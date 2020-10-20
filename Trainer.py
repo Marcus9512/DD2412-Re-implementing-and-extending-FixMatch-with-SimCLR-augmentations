@@ -350,7 +350,7 @@ class Trainer:
                             for prob_passed in mask:
                                 if prob_passed != 0:
                                     i += 1
-                        exit()
+
                         #input_U_sa = strong_augment(batch_U).to(device=self.main_device)
                         strong_a = strong_a.to(device=self.main_device)
                         out_U_sa = model(strong_a)
