@@ -4,6 +4,8 @@ from torch.utils.data import Dataset
 class L_U_Dataset(Dataset):
     '''
     Custom dataset designed to return one element from the labeled dataset and mu elements from the unlabeled
+
+    DEPRECATED, IS NOT USED ANYMORE
     '''
     def __init__(self, labeled, unlabeled, mu):
         self.len = len(labeled)
