@@ -97,8 +97,9 @@ if __name__ == "__main__":
     logger.info(f"Num classes: {num_classes}")
 
     #model = torch.hub.load('pytorch/vision:v0.6.0', 'wideresnet50_2', pretrained=False, num_classes=10)
+
     model = Wide_ResNet(28, 2, 0.3, num_classes)
-    loss_function = nn.CrossEntropyLoss()
+    loss_function = nn.CrossEntropyLoss(reduction='none')
 
     timestamp = time.time()
     trainer = Trainer(dataset, loss_function, batch_size=args.batch_size, mu=args.mu, workers=args.workers)

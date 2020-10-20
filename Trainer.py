@@ -322,7 +322,7 @@ class Trainer:
                         # Reset gradients between training
                         optimizer.zero_grad()
                         out_X = model(batch_X)
-                        loss_X = criterion_X(out_X, label_X)
+                        loss_X = torch.mean(criterion_X(out_X, label_X))
 
                         loss_X.detach()
                         label_X.detach()
@@ -346,11 +346,11 @@ class Trainer:
                             probs, labels_U = torch.max(pseudo_labels, dim=1)
 
                             mask = probs.ge(threshold).float()
-                            #count the number of unlabel images that will affect the loss
-                            for prob_passed in mask:
-                                if prob_passed != 0:
-                                    i += 1
 
+                        #count the number of unlabel images that will affect the loss
+                        num_of_pseudo_labels = torch.nonzero(mask,as_tuple=False)
+                        i+=len(num_of_pseudo_labels)    
+                        
                         #input_U_sa = strong_augment(batch_U).to(device=self.main_device)
                         strong_a = strong_a.to(device=self.main_device)
                         out_U_sa = model(strong_a)
@@ -368,7 +368,7 @@ class Trainer:
                         with torch.no_grad():
                             out = model(batch_X)
 
-                            loss = criterion_X(out, label_X)
+                            loss = torch.mean(criterion_X(out, label_X))
 
                     combined_loss += loss.item()
 
