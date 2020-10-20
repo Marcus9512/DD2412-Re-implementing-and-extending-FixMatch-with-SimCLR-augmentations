@@ -350,12 +350,12 @@ class Trainer:
                         #input_U_sa = strong_augment(batch_U).to(device=self.main_device)
                         strong_a = strong_a.to(device=self.main_device)
                         out_U_sa = model(strong_a)
-                        loss_U = criterion_U(out_U_sa, labels_U) * mask
-                        num_of_pseudo_labels = torch.nonzero(loss_U.detach(),as_tuple=False)
+                        print("mask", mask.shape)
+                        num_of_pseudo_labels = torch.nonzero(mask,as_tuple=False)
                         print("pseduo",num_of_pseudo_labels)
                         print("num",len(num_of_pseudo_labels))
                         i+=len(num_of_pseudo_labels)
-                        loss_U = torch.mean(loss_U)
+                        loss_U = torch.mean(criterion_U(out_U_sa, labels_U) * mask)
                         # remove from vram
                         del strong_a
                         del out_U_sa
