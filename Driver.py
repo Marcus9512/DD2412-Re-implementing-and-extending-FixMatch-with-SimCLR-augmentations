@@ -10,7 +10,7 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 from Models.Wideresnet import *
 from Custom_dataset.Unlabeled_dataset import *
-from augmentation import *
+from augmentation2 import *
 
 from Trainer import *
 
@@ -23,7 +23,7 @@ def get_normalization():
     https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
     :return:
     '''
-    return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])#
+    return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])#
 
 def get_dataset(arg):
     '''
