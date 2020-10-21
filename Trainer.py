@@ -96,13 +96,26 @@ class Trainer:
         set1, set2 = ut.random_split(dataset, [length_set1, length_set2])
         return set1, set2
 
-    def split_labels_per_class(self, dataset, num_labels):
+    def split_labels_per_class(self, dataset, num_labels, num_images = None):
 
         indices = np.arange(len(dataset))
         labels_indices, unlabeled_indices = train_test_split(indices, train_size=num_labels * self.dataset["num_classes"],
                                                        stratify=dataset.targets)
+        if num_images != None:
+            labels_indices, unlabeled_indices = self.expand_indicies(labels_indices, unlabeled_indices, num_images)
 
         return ut.Subset(dataset, labels_indices), ut.Subset(dataset, unlabeled_indices)
+
+    def expand_indicies(self, labeled, unlabeled, num_images):
+        print(len(labeled))
+        print(num_images)
+        expand_label = np.random.choice(labeled, num_images - len(labeled))
+        expand_unlabel = np.random.choice(unlabeled, (num_images*self.mu) - len(unlabeled))
+
+        labeled = np.append(labeled, expand_label)
+        unlabeled = np.append(unlabeled, expand_unlabel)
+
+        return labeled, unlabeled
 
 
     def create_custom_dataloader(self, label, unlabeled):
@@ -119,13 +132,14 @@ class Trainer:
                                          num_workers=self.workers, pin_memory=True)
 
     def create_custom_dataloader2(self, label, unlabeled):
-        label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, shuffle=True,
+        label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, sampler=ut.RandomSampler(label),
                                          num_workers=self.workers, pin_memory=True, drop_last=True)
-        unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size * self.mu, shuffle=True,
+        unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size * self.mu, sampler=ut.RandomSampler(unlabeled),
                                              num_workers=self.workers, pin_memory=True, drop_last=True)
 
         self.logger.info(f"Labeled length: {len(label_dataloader)}, unlabeled length: {len(unlabeled_dataloader)}")
         return label_dataloader, unlabeled_dataloader
+
 
     def validate_directory(self, save_path):
         '''
@@ -237,20 +251,21 @@ class Trainer:
 
         self.logger.info(f"Dataset length: {len(trainset)}")
 
-        labeled, rest = self.split_labels_per_class(self.dataset["train_set"], num_labels)
+        labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], num_labels, num_images=65536) #num_image = 2^16
         #val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
-
-        self.logger.info(f"labeled len {len(labeled)} rest len {len(rest)}")
 
         # Create dataloaders for each part of the dataset
         #train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
-        label_dataloader, val_dataloader = self.create_custom_dataloader2(labeled, rest)
+        label_dataloader, unlabeled_dataloader = self.create_custom_dataloader2(labeled, unlabeled)
 
-        unlabeled_dataloader = ut.DataLoader(self.dataset["unlabeled"], batch_size=self.batch_size*self.mu, shuffle=True,
-                                       num_workers=self.workers, pin_memory=True)
+        #unlabeled_dataloader = ut.DataLoader(self.dataset["unlabeled"], batch_size=self.batch_size*self.mu, shuffle=True,
+        #                               num_workers=self.workers, pin_memory=True)
 
         #val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
         #                               num_workers=self.workers, pin_memory=True)
+
+        val_dataloader = ut.DataLoader(self.dataset["test_set"], batch_size=self.batch_size, shuffle=True,
+                                        num_workers=self.workers, pin_memory=True)
         '''
         TO VERIFY NUMBER OF LABELS
         store = np.zeros(10)
@@ -270,8 +285,8 @@ class Trainer:
 
         #K total number of steps
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
-        K = min(len(label_dataloader), len(unlabeled_dataloader))*(self.batch_size + self.batch_size*self.mu) * epochs
-        #K = 2^20
+        #K = min(len(label_dataloader), len(unlabeled_dataloader))*(self.batch_size + self.batch_size*self.mu) * epochs
+        K = 1048576 #(2^20)
         #scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
 
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
@@ -313,7 +328,6 @@ class Trainer:
                     current_dataloader = val_dataloader
                     length = len(val_dataloader)
                     model.eval()
-
                 combined_loss = 0
                 combined_loss_x = 0
                 combined_loss_u = 0
