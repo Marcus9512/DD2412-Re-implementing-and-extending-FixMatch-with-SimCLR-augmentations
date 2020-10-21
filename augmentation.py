@@ -44,7 +44,7 @@ def weak_augment(batch):
     #torchvision.utils.save_image(batch[0], "img_weak_aug.png")
     return batch
 
-def get_weak_transformasd():
+def get_weak_transform():
     weak_transform = torchvision.transforms.Compose([
         #torchvision.transforms.Normalize((-0.5/0.5, -0.5/0.5, -0.5/0.5), (1/0.5, 1/0.5, 1/0.5)),
         #torchvision.transforms.functional.to_pil_image,
@@ -72,7 +72,7 @@ def strong_augment(batch, dataset_name):
     #torchvision.utils.save_image(batch[0], "img_strog_aug.png")
     return batch
     
-def get_strong_transformasd(dataset_name):
+def get_strong_transform(dataset_name):
     strong_transform = torchvision.transforms.Compose([
         #torchvision.transforms.Normalize((-0.5 / 0.5, -0.5 / 0.5, -0.5 / 0.5), (1 / 0.5, 1 / 0.5, 1 / 0.5)),
         cutout_transform(dataset_name),

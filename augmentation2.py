@@ -38,7 +38,7 @@ class Wrapper:
                                                           ])
 
     def __call__(self, item):
-        return self.transform1(item), self.transform2(item)
+        return item, self.transform1(item), self.transform2(item)
 
 
 def weak_augment(batch):

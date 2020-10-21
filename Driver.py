@@ -7,9 +7,9 @@ import time
 import argparse
 import torchvision
 import torch.nn as nn
-import torchvision.transforms as transforms
+
 from Models.Wideresnet import *
-from Custom_dataset.Unlabeled_dataset import *
+
 from augmentation2 import *
 
 from Trainer import *
@@ -17,13 +17,21 @@ from Trainer import *
 
 LOGGER_NAME = "Driver"
 
-def get_normalization():
+def get_transform():
     '''
     Based on nomalisation example from:
     https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
     :return:
     '''
-    return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])#
+    return transforms.Compose([transforms.ToTensor()])
+
+def get_transform_test():
+    '''
+    Based on nomalisation example from:
+    https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+    :return:
+    '''
+    return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
 
 def get_dataset(arg):
     '''
@@ -32,32 +40,30 @@ def get_dataset(arg):
     :return:
     '''
 
-    def get_return_format(train, test, unlabeled, num_classes, name):
+    def get_return_format(train, test, num_classes, name):
         return {
             "train_set": train,
-            "unlabeled": unlabeled,
             "test_set": test,
             "num_classes": num_classes,
             "name": name
         }
 
-    transform = get_normalization()
 
     if arg.lower() == "cifar10":
         # Based from pytorch Cifar10, https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
-        train = torchvision.datasets.CIFAR10(root='./Data', train=True, download=True, transform = transform)
-        test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform = transform)
-        unlabeled = Unlabeled_dataset_cifar10(root='./Unlabeled', train=True, download=True,
-                                            transform= Wrapper(get_weak_transform(), get_strong_transform("CIFAR10")))
+        train = torchvision.datasets.CIFAR10(root='./Data', train=True, download=True, transform= get_transform())
+        test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform= get_transform_test())
+        #unlabeled = Unlabeled_dataset_cifar10(root='./Unlabeled', train=True, download=True,
+        #                                    transform= Wrapper(get_weak_transform(), get_strong_transform("CIFAR10")))
 
-        return get_return_format(train, test, unlabeled, 10, "CIFAR10")
+        return get_return_format(train, test, 10, "CIFAR10")
 
     elif arg.lower() == "cifar100":
-        train = torchvision.datasets.CIFAR100(root='./Data', train=True, download=True, transform = transform)
-        test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform = transform)
-        unlabeled = Unlabeled_dataset_cifar100(root='./Unlabeled', train=True, download=True,
-                                              transform=Wrapper(get_weak_transform(), get_strong_transform("CIFAR100")))
-        return get_return_format(train, test, unlabeled, 100, "CIFAR100")
+        train = torchvision.datasets.CIFAR100(root='./Data', train=True, download=True, transform= get_transform())
+        test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform= get_transform_test())
+        #unlabeled = Unlabeled_dataset_cifar100(root='./Unlabeled', train=True, download=True,
+        #                                      transform=Wrapper(get_weak_transform(), get_strong_transform("CIFAR100")))
+        return get_return_format(train, test, 100, "CIFAR100")
 
     return None
 
@@ -72,8 +78,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, help="number of epochs", default=200)
     parser.add_argument("--num_labels", type=int, help="number of labels", default=400)
     parser.add_argument("--checkpoint_ratio", type=int, help="How often should the network backup the training", default=50)
-    parser.add_argument("--resume", type=str, help="Resume training, path to file",
-                        default=None)
+    parser.add_argument("--resume", type=str, help="Resume training, path to file", default=None)
     parser.add_argument("--workers", type=int, help="Number of workers, higher values could give better performance, however, requiers more VRAM", default=4)
 
     args = parser.parse_args()

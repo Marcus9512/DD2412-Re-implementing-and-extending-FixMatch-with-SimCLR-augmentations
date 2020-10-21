@@ -1,22 +1,31 @@
 import os
 import math
 import logging
-import torch
+import torchvision.transforms as transforms
 import torch.optim as opt
 import torch.utils.data as ut
 import torch.utils.tensorboard as tb
 
 from cosine_annealing import LegacyCosineAnnealingLR
+from Custom_dataset.Unlabeled_dataset import *
 from os import path
 from datetime import datetime
 from Custom_dataset import Labeled_Unlabeled_dataset as lu
-from augmentation import *
 from sklearn.model_selection import *
 from torch_ema.ema import ExponentialMovingAverage
 from tqdm import tqdm , trange
+from augmentation import *
 
 
 LOGGER_NAME = "Trainer"
+
+def get_normalization():
+    '''
+    Based on nomalisation example from:
+    https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+    :return:
+    '''
+    return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
 
 class Trainer:
 
@@ -82,20 +91,6 @@ class Trainer:
                 "Could not find pycuda and thus not show amazing stats about youre GPU, have you installed CUDA?")
             pass
 
-    def split_dataset(self, dataset, percent_to_set2):
-        assert percent_to_set2 < 1.0
-        assert percent_to_set2 > 0
-
-        size_of_dataset = len(dataset)
-        length_set1 = int((1.0 - percent_to_set2)*size_of_dataset)
-        length_set2 = int(percent_to_set2*size_of_dataset)
-
-        # compensate for integer division
-        length_set2 = length_set2 if (length_set1 + length_set2) == len(dataset) else length_set2+1
-
-        set1, set2 = ut.random_split(dataset, [length_set1, length_set2])
-        return set1, set2
-
     def split_labels_per_class(self, dataset, num_labels, num_images = None):
 
         indices = np.arange(len(dataset))
@@ -104,7 +99,12 @@ class Trainer:
         if num_images != None:
             labels_indices, unlabeled_indices = self.expand_indicies(labels_indices, unlabeled_indices, num_images)
 
-        return ut.Subset(dataset, labels_indices), ut.Subset(dataset, unlabeled_indices)
+        return Unlabeled_dataset_cifar10(root='./Data', train=True, download=False,
+                                         transform=get_normalization(),
+                                         data_indicies=labels_indices), \
+               Unlabeled_dataset_cifar10(root='./Data', train=True, download=False,
+                                         transform=Wrapper(get_weak_transform(), get_strong_transform(self.dataset["name"])),
+                                         data_indicies=unlabeled_indices)
 
     def expand_indicies(self, labeled, unlabeled, num_images):
         print(len(labeled))
@@ -119,23 +119,13 @@ class Trainer:
 
 
     def create_custom_dataloader(self, label, unlabeled):
-        '''
-        Creates a custom dataset of label and unlabeled
-        :param label:
-        :param unlabeled:
-        :return:
-        '''
-        # This is a custom dataset located in the file Labeled_Unlabeled_dataset.py
-        l_u_dataset = lu.L_U_Dataset(label, unlabeled, self.mu)
-
-        return ut.DataLoader(l_u_dataset, batch_size=self.batch_size, shuffle=True,
-                                         num_workers=self.workers, pin_memory=True)
-
-    def create_custom_dataloader2(self, label, unlabeled):
-        label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, sampler=ut.RandomSampler(label),
+        label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, shuffle=True,
                                          num_workers=self.workers, pin_memory=True, drop_last=True)
-        unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size * self.mu, sampler=ut.RandomSampler(unlabeled),
+
+        unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size * self.mu, shuffle=True,
                                              num_workers=self.workers, pin_memory=True, drop_last=True)
+
+
 
         self.logger.info(f"Labeled length: {len(label_dataloader)}, unlabeled length: {len(unlabeled_dataloader)}")
         return label_dataloader, unlabeled_dataloader
@@ -256,7 +246,7 @@ class Trainer:
 
         # Create dataloaders for each part of the dataset
         #train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
-        label_dataloader, unlabeled_dataloader = self.create_custom_dataloader2(labeled, unlabeled)
+        label_dataloader, unlabeled_dataloader = self.create_custom_dataloader(labeled, unlabeled)
 
         #unlabeled_dataloader = ut.DataLoader(self.dataset["unlabeled"], batch_size=self.batch_size*self.mu, shuffle=True,
         #                               num_workers=self.workers, pin_memory=True)
@@ -336,15 +326,21 @@ class Trainer:
                 for j, (X, U) in enumerate(current_dataloader):
                     if session == "training":
                         batch_X, label_X = X
-                        weak_a, strong_a = U
+                        (weak_a, strong_a), _ = U
 
+                        #print(weak_a.shape)
+                        #print(strong_a.shape)
+                        #print("Label ",label_X)
                         #self.imshow(torchvision.utils.make_grid(batch_X))
+                        #self.imshow(torchvision.utils.make_grid(strong_a))
                         #self.imshow(torchvision.utils.make_grid(weak_a))
+
                         #print('GroundTruth: ', label_X)
                     else:
                         # Verification have no unlabeled dataset
                         batch_X, label_X = (X, U)
 
+                    print("Here ",j)
 
                     # Send sample and label to GPU or CPU
                     batch_X = batch_X.to(device=self.main_device)
@@ -484,50 +480,6 @@ class Trainer:
 
         self.logger.info(f"Accuracy: {(correct / number_of_testdata) * 100}")
 
-
-class WarmupCosineLrScheduler(opt.lr_scheduler._LRScheduler):
-    '''
-            This is different from official definition, this is implemented according to
-            the paper of fix-match
-            '''
-
-    def __init__(
-            self,
-            optimizer,
-            max_iter,
-            warmup_iter,
-            warmup_ratio=5e-4,
-            warmup='exp',
-            last_epoch=-1,
-    ):
-        self.max_iter = max_iter
-        self.warmup_iter = warmup_iter
-        self.warmup_ratio = warmup_ratio
-        self.warmup = warmup
-        super(WarmupCosineLrScheduler, self).__init__(optimizer, last_epoch)
-
-    def get_lr(self):
-        ratio = self.get_lr_ratio()
-        lrs = [ratio * lr for lr in self.base_lrs]
-        return lrs
-
-    def get_lr_ratio(self):
-        if self.last_epoch < self.warmup_iter:
-            ratio = self.get_warmup_ratio()
-        else:
-            real_iter = self.last_epoch - self.warmup_iter
-            real_max_iter = self.max_iter - self.warmup_iter
-            ratio = np.cos((7 * np.pi * real_iter) / (16 * real_max_iter))
-        return ratio
-
-    def get_warmup_ratio(self):
-        assert self.warmup in ('linear', 'exp')
-        alpha = self.last_epoch / self.warmup_iter
-        if self.warmup == 'linear':
-            ratio = self.warmup_ratio + (1 - self.warmup_ratio) * alpha
-        elif self.warmup == 'exp':
-            ratio = self.warmup_ratio ** (1. - alpha)
-        return ratio
 
 '''
 Code graveyard
