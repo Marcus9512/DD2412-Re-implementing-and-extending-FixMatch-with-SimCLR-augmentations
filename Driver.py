@@ -10,7 +10,7 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 from Models.Wideresnet import *
 from Custom_dataset.Unlabeled_dataset import *
-from augmentation import  *
+from augmentation import *
 
 from Trainer import *
 
@@ -99,10 +99,11 @@ if __name__ == "__main__":
     #model = torch.hub.load('pytorch/vision:v0.6.0', 'wideresnet50_2', pretrained=False, num_classes=10)
 
     model = Wide_ResNet(28, 2, 0.3, num_classes)
-    loss_function = nn.CrossEntropyLoss(reduction='none')
+    loss_function_X = nn.CrossEntropyLoss(reduction='mean')
+    loss_function_U = nn.CrossEntropyLoss(reduction='none')
 
     timestamp = time.time()
-    trainer = Trainer(dataset, loss_function, batch_size=args.batch_size, mu=args.mu, workers=args.workers)
+    trainer = Trainer(dataset, loss_function_X=loss_function_X, loss_function_U=loss_function_U, batch_size=args.batch_size, mu=args.mu, workers=args.workers)
     path = trainer.train(model, learn_rate=0.03, weight_decay=weight_decay, momentum=1e-9, epochs=args.epochs, num_labels=args.num_labels, threshold=0.95, resume_path=args.resume, checkpoint_ratio=args.checkpoint_ratio)
     trainer.test(path, model)
     trainer.close_summary()

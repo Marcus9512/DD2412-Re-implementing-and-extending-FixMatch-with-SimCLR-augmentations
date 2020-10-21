@@ -20,7 +20,7 @@ LOGGER_NAME = "Trainer"
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function, batch_size=10, mu=7, use_gpu=True, workers=4):
+    def __init__(self, dataset, loss_function_X, loss_function_U, batch_size=10, mu=7, use_gpu=True, workers=4):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -37,7 +37,8 @@ class Trainer:
         self.logger = logger
         self.dataset = dataset
         self.batch_size = batch_size
-        self.loss_function = loss_function
+        self.loss_function_X = loss_function_X
+        self.loss_function_U = loss_function_U
         self.workers = workers
 
         # setup GPU if possible
@@ -119,9 +120,9 @@ class Trainer:
 
     def create_custom_dataloader2(self, label, unlabeled):
         label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, shuffle=True,
-                                         num_workers=self.workers, pin_memory=True)
+                                         num_workers=self.workers, pin_memory=True, drop_last=True)
         unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size * self.mu, shuffle=True,
-                                             num_workers=self.workers, pin_memory=True)
+                                             num_workers=self.workers, pin_memory=True, drop_last=True)
 
         self.logger.info(f"Labeled length: {len(label_dataloader)}, unlabeled length: {len(unlabeled_dataloader)}")
         return label_dataloader, unlabeled_dataloader
@@ -192,7 +193,22 @@ class Trainer:
     def cosine_learning(self, optimizer, function):
         return opt.lr_scheduler.LambdaLR(optimizer, function)
 
-    def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9, checkpoint_ratio=None, resume_path=None):
+    def get_cosine_schedule_with_warmup(self, optimizer,
+                                        num_warmup_steps,
+                                        num_training_steps,
+                                        num_cycles=7. / 16.,
+                                        last_epoch=-1):
+        def _lr_lambda(current_step):
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            no_progress = float(current_step - num_warmup_steps) / \
+                          float(max(1, num_training_steps - num_warmup_steps))
+            return max(0., math.cos(math.pi * num_cycles * no_progress))
+
+        return opt.lr_scheduler.LambdaLR(optimizer, _lr_lambda, last_epoch)
+
+
+    def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.95, checkpoint_ratio=None, resume_path=None):
         '''
 
         :param model:
@@ -206,6 +222,7 @@ class Trainer:
         :return: a path of the saved model
         '''
 
+        momentum = 0.9
         self.log_information(learn_rate, weight_decay, momentum, epochs, percent_to_validation, num_labels, checkpoint_ratio, resume_path)
 
         # set model to GPU or CPU
@@ -253,12 +270,16 @@ class Trainer:
 
         #K total number of steps
         #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
-        K =  min(len(label_dataloader), len(unlabeled_dataloader)) * epochs
+        K = min(len(label_dataloader), len(unlabeled_dataloader))*(self.batch_size + self.batch_size*self.mu) * epochs
+        #K = 2^20
         #scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
 
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
-        scheduler = self.cosine_learning(optimizer, cosin)
-
+        #scheduler = self.cosine_learning(optimizer, cosin)
+        scheduler= self.get_cosine_schedule_with_warmup(optimizer,5, K)
+        #scheduler = WarmupCosineLrScheduler(
+        #    optimizer, max_iter=K, warmup_iter=0
+        #)
         start_epoch = 0
 
         # Load checkpoint
@@ -276,8 +297,8 @@ class Trainer:
                 exit()
 
         # set the wanted loss function to criterion
-        criterion_X = self.loss_function
-        criterion_U = self.loss_function
+        criterion_X = self.loss_function_X
+        criterion_U = self.loss_function_U
 
         model.train()
         for e in range(start_epoch, epochs):
@@ -294,10 +315,11 @@ class Trainer:
                     model.eval()
 
                 combined_loss = 0
+                combined_loss_x = 0
+                combined_loss_u = 0
                 i = 0
                 pbar = tqdm(total=length)
                 for j, (X, U) in enumerate(current_dataloader):
-
                     if session == "training":
                         batch_X, label_X = X
                         weak_a, strong_a = U
@@ -322,7 +344,7 @@ class Trainer:
                         # Reset gradients between training
                         optimizer.zero_grad()
                         out_X = model(batch_X)
-                        loss_X = torch.mean(criterion_X(out_X, label_X))
+                        loss_X = criterion_X(out_X, label_X)
 
                         loss_X.detach()
                         label_X.detach()
@@ -362,13 +384,16 @@ class Trainer:
 
                         loss_U.detach()
 
+                        combined_loss_x += loss_X.item()
+                        combined_loss_u += loss_U.item()
+
                         loss = loss_X + lambda_U * loss_U
                     else:
                         # Disable gradient modifications
                         with torch.no_grad():
                             out = model(batch_X)
 
-                            loss = torch.mean(criterion_X(out, label_X))
+                            loss = criterion_X(out, label_X)
 
                     combined_loss += loss.item()
 
@@ -385,8 +410,13 @@ class Trainer:
                     pbar.update(1)
 
                 combined_loss /= i
-                self.logger.info(f"{session} loss: {combined_loss}")
+                combined_loss_x /= i
+                combined_loss_u /= i
+
+                self.logger.info(f"{session} loss: {combined_loss} loss_x: {combined_loss_x} loss_u: {combined_loss_u}")
                 self.summary.add_scalar('Loss/' + session, combined_loss, e)
+                self.summary.add_scalar('Loss_x/' + session, combined_loss_x, e)
+                self.summary.add_scalar('Loss_u/' + session, combined_loss_u, e)
 
             if e % checkpoint_ratio == 0:
                 checkpoint = {
@@ -440,6 +470,50 @@ class Trainer:
 
         self.logger.info(f"Accuracy: {(correct / number_of_testdata) * 100}")
 
+
+class WarmupCosineLrScheduler(opt.lr_scheduler._LRScheduler):
+    '''
+            This is different from official definition, this is implemented according to
+            the paper of fix-match
+            '''
+
+    def __init__(
+            self,
+            optimizer,
+            max_iter,
+            warmup_iter,
+            warmup_ratio=5e-4,
+            warmup='exp',
+            last_epoch=-1,
+    ):
+        self.max_iter = max_iter
+        self.warmup_iter = warmup_iter
+        self.warmup_ratio = warmup_ratio
+        self.warmup = warmup
+        super(WarmupCosineLrScheduler, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        ratio = self.get_lr_ratio()
+        lrs = [ratio * lr for lr in self.base_lrs]
+        return lrs
+
+    def get_lr_ratio(self):
+        if self.last_epoch < self.warmup_iter:
+            ratio = self.get_warmup_ratio()
+        else:
+            real_iter = self.last_epoch - self.warmup_iter
+            real_max_iter = self.max_iter - self.warmup_iter
+            ratio = np.cos((7 * np.pi * real_iter) / (16 * real_max_iter))
+        return ratio
+
+    def get_warmup_ratio(self):
+        assert self.warmup in ('linear', 'exp')
+        alpha = self.last_epoch / self.warmup_iter
+        if self.warmup == 'linear':
+            ratio = self.warmup_ratio + (1 - self.warmup_ratio) * alpha
+        elif self.warmup == 'exp':
+            ratio = self.warmup_ratio ** (1. - alpha)
+        return ratio
 
 '''
 Code graveyard
