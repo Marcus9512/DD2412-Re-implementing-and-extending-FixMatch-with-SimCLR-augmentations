@@ -10,7 +10,6 @@ import torch.nn as nn
 
 from Models.Wideresnet import *
 
-from augmentation2 import *
 
 from Trainer import *
 

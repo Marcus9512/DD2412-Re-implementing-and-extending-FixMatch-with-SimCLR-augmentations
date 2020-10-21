@@ -12,18 +12,19 @@ import numpy as np
 from PIL import Image
 
 
-
+cifar10_mean = (0.4914, 0.4822, 0.4465)
+cifar10_std = (0.2471, 0.2435, 0.2616)
 
 
 class Wrapper:
     def __init__(self, transform1, transform2):            
         self.transform1 = torchvision.transforms.Compose([transform1,
                                                         torchvision.transforms.functional.to_tensor,
-                                                        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                                        torchvision.transforms.Normalize(cifar10_mean, cifar10_std)
                                                         ])
         self.transform2 = torchvision.transforms.Compose([transform2,
                                                         torchvision.transforms.functional.to_tensor,
-                                                        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                                        torchvision.transforms.Normalize(cifar10_mean, cifar10_std)
                                                         ])
 
     def __call__(self, item):

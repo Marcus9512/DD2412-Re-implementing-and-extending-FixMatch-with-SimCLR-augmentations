@@ -115,6 +115,7 @@ class Trainer:
         labeled = np.append(labeled, expand_label)
         unlabeled = np.append(unlabeled, expand_unlabel)
 
+
         return labeled, unlabeled
 
 
@@ -328,6 +329,12 @@ class Trainer:
                         batch_X, label_X = X
                         (weak_a, strong_a), _ = U
 
+                        label_X = label_X.long()
+                        #print(label_X)
+                        #print(len(label_X))
+                        #print(label_X.shape)
+                        #print(label_X.long())
+
                         #print(weak_a.shape)
                         #print(strong_a.shape)
                         #print("Label ",label_X)
@@ -340,7 +347,6 @@ class Trainer:
                         # Verification have no unlabeled dataset
                         batch_X, label_X = (X, U)
 
-                    print("Here ",j)
 
                     # Send sample and label to GPU or CPU
                     batch_X = batch_X.to(device=self.main_device)
@@ -413,8 +419,7 @@ class Trainer:
                         optimizer.step()
                         scheduler.step()
                         self.ema.update(model.parameters())
-                    if (i % 1000 == 0):
-                        self.logger.info(f"{session} img: {i}")
+
 
                     i += label_X.size(0)
                     pbar.update(1)
