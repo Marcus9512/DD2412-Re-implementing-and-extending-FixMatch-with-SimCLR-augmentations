@@ -319,14 +319,7 @@ class Trainer:
                         (weak_a, strong_a), _ = U
 
                         label_X = label_X.long()
-                        #print(label_X)
-                        #print(len(label_X))
-                        #print(label_X.shape)
-                        #print(label_X.long())
-
-                        #print(weak_a.shape)
-                        #print(strong_a.shape)
-                        #print("Label ",label_X)
+                       
                         #self.imshow(torchvision.utils.make_grid(batch_X))
                         #self.imshow(torchvision.utils.make_grid(strong_a))
                         #self.imshow(torchvision.utils.make_grid(weak_a))
