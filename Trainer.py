@@ -3,14 +3,12 @@ import math
 import logging
 import torchvision.transforms as transforms
 import torch.optim as opt
-import torch.utils.data as ut
 import torch.utils.tensorboard as tb
 
-from cosine_annealing import LegacyCosineAnnealingLR
+
 from Custom_dataset.Unlabeled_dataset import *
 from os import path
 from datetime import datetime
-from Custom_dataset import Labeled_Unlabeled_dataset as lu
 from sklearn.model_selection import *
 from torch_ema.ema import ExponentialMovingAverage
 from tqdm import tqdm , trange
@@ -236,7 +234,6 @@ class Trainer:
         # split dataset to validation and train, then split train to labeled / unlabeled
         #train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
         # The formula represents the percent amount of data to unlabeled data
-        #labeled, unlabeled = self.split_dataset(train, self.mu / (1 + self.mu))
 
         trainset = self.dataset["train_set"]
 
@@ -249,11 +246,6 @@ class Trainer:
         #train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
         label_dataloader, unlabeled_dataloader = self.create_custom_dataloader(labeled, unlabeled)
 
-        #unlabeled_dataloader = ut.DataLoader(self.dataset["unlabeled"], batch_size=self.batch_size*self.mu, shuffle=True,
-        #                               num_workers=self.workers, pin_memory=True)
-
-        #val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
-        #                               num_workers=self.workers, pin_memory=True)
 
         val_dataloader = ut.DataLoader(self.dataset["test_set"], batch_size=self.batch_size, shuffle=True,
                                         num_workers=self.workers, pin_memory=True)
@@ -275,17 +267,14 @@ class Trainer:
         self.ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
 
         #K total number of steps
-        #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
-        #K = min(len(label_dataloader), len(unlabeled_dataloader))*(self.batch_size + self.batch_size*self.mu) * epochs
+
         K = 1048576 #(2^20)
         #scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
 
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
         #scheduler = self.cosine_learning(optimizer, cosin)
         scheduler= self.get_cosine_schedule_with_warmup(optimizer,5, K)
-        #scheduler = WarmupCosineLrScheduler(
-        #    optimizer, max_iter=K, warmup_iter=0
-        #)
+
         start_epoch = 0
 
         # Load checkpoint

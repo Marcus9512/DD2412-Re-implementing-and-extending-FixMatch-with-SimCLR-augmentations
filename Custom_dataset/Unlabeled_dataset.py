@@ -48,8 +48,6 @@ class Unlabeled_dataset_cifar10(torchvision.datasets.CIFAR10):
         self.data = self.data[data_indicies]
         self.targets = np.array(self.targets)[data_indicies]
 
-
-
     def __getitem__(self, item):
         img, target = self.data[item], self.targets[item]
 
