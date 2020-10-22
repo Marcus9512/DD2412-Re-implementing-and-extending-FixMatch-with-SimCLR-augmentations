@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
     timestamp = time.time()
     trainer = Trainer(dataset, loss_function_X=loss_function_X, loss_function_U=loss_function_U, batch_size=args.batch_size, mu=args.mu, workers=args.workers)
-    path = trainer.train(model, learn_rate=0.03, weight_decay=weight_decay, momentum=1e-9, epochs=args.epochs, num_labels=args.num_labels, threshold=0.95, resume_path=args.resume, checkpoint_ratio=args.checkpoint_ratio)
+    path = trainer.train(model, learn_rate=0.03, weight_decay=weight_decay, momentum=0.9, epochs=args.epochs, num_labels=args.num_labels, threshold=0.95, resume_path=args.resume, checkpoint_ratio=args.checkpoint_ratio)
     trainer.test(path, model)
     trainer.close_summary()
     logger.info(f"Time to complete training and test {time.time() - timestamp}seconds")

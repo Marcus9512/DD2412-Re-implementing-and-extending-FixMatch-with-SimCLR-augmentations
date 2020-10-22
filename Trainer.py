@@ -196,20 +196,6 @@ class Trainer:
     def cosine_learning(self, optimizer, function):
         return opt.lr_scheduler.LambdaLR(optimizer, function)
 
-    def get_cosine_schedule_with_warmup(self, optimizer,
-                                        num_warmup_steps,
-                                        num_training_steps,
-                                        num_cycles=7. / 16.,
-                                        last_epoch=-1):
-        def _lr_lambda(current_step):
-            if current_step < num_warmup_steps:
-                return float(current_step) / float(max(1, num_warmup_steps))
-            no_progress = float(current_step - num_warmup_steps) / \
-                          float(max(1, num_training_steps - num_warmup_steps))
-            return max(0., math.cos(math.pi * num_cycles * no_progress))
-
-        return opt.lr_scheduler.LambdaLR(optimizer, _lr_lambda, last_epoch)
-
 
     def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.95, checkpoint_ratio=None, resume_path=None):
         '''
@@ -225,7 +211,6 @@ class Trainer:
         :return: a path of the saved model
         '''
 
-        momentum = 0.9
         self.log_information(learn_rate, weight_decay, momentum, epochs, percent_to_validation, num_labels, checkpoint_ratio, resume_path)
 
         # set model to GPU or CPU
@@ -272,9 +257,9 @@ class Trainer:
 
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
         
-        #scheduler = self.cosine_learning(optimizer, cosin)
+        scheduler = self.cosine_learning(optimizer, cosin)
         #scheduler= self.get_cosine_schedule_with_warmup(optimizer,5, K)
-        scheduler = CosineAnnealingWarmRestarts(optimizer,65536,eta_min=0.0002)
+        #scheduler = CosineAnnealingWarmRestarts(optimizer,1024,eta_min=0.0002)
         start_epoch = 0
 
         # Load checkpoint

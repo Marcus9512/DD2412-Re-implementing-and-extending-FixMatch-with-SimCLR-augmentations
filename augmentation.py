@@ -31,9 +31,6 @@ class Wrapper:
         return self.transform1(item), self.transform2(item)
 
 
-
-
-
 def weak_augment(batch):
     #torchvision.utils.save_image(batch[0], "img_weak_1.png")
 
@@ -56,10 +53,6 @@ def get_weak_transform():
         ])
     return weak_transform
 
-
-
-
-
 def strong_augment(batch, dataset_name):
     #torchvision.utils.save_image(batch[0], "img_strog_1.png")
 
@@ -76,9 +69,9 @@ def strong_augment(batch, dataset_name):
 def get_strong_transform(dataset_name):
     strong_transform = torchvision.transforms.Compose([
         #torchvision.transforms.Normalize((-0.5 / 0.5, -0.5 / 0.5, -0.5 / 0.5), (1 / 0.5, 1 / 0.5, 1 / 0.5)),
-        cutout_transform(dataset_name),
         #torchvision.transforms.functional.to_pil_image,
         RandAugment(),
+        cutout_transform(dataset_name),
         #torchvision.transforms.functional.to_tensor
         #torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
