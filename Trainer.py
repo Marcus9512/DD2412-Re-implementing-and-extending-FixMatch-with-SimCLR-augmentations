@@ -269,9 +269,9 @@ class Trainer:
         #K total number of steps
 
         K = 1048576 #(2^20)
-        #scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
 
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
+        
         #scheduler = self.cosine_learning(optimizer, cosin)
         scheduler= self.get_cosine_schedule_with_warmup(optimizer,5, K)
 
@@ -319,7 +319,7 @@ class Trainer:
                         (weak_a, strong_a), _ = U
 
                         label_X = label_X.long()
-                       
+
                         #self.imshow(torchvision.utils.make_grid(batch_X))
                         #self.imshow(torchvision.utils.make_grid(strong_a))
                         #self.imshow(torchvision.utils.make_grid(weak_a))
