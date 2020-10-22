@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 import torch.optim as opt
 import torch.utils.tensorboard as tb
 
-
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from Custom_dataset.Unlabeled_dataset import *
 from os import path
 from datetime import datetime
@@ -273,8 +273,8 @@ class Trainer:
 
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
         #scheduler = self.cosine_learning(optimizer, cosin)
-        scheduler= self.get_cosine_schedule_with_warmup(optimizer,5, K)
-
+        #scheduler= self.get_cosine_schedule_with_warmup(optimizer,5, K)
+        scheduler = CosineAnnealingWarmRestarts(optimizer,65536,eta_min=0.0002)
         start_epoch = 0
 
         # Load checkpoint
