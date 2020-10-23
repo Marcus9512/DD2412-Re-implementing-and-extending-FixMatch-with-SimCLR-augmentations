@@ -17,13 +17,20 @@ from augmentation import *
 
 LOGGER_NAME = "Trainer"
 
-def get_normalization():
+def get_normalization(dataset):
     '''
     Based on nomalisation example from:
     https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
     :return:
     '''
-    return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
+    if dataset == "CIFAR10":
+        return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
+    elif dataset == "CIFAR100":
+        return transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))])
+    else:
+        print("Error in nomalization")
+        exit()
 
 class Trainer:
 
@@ -98,10 +105,10 @@ class Trainer:
             labels_indices, unlabeled_indices = self.expand_indicies(labels_indices, unlabeled_indices, num_images)
 
         return Unlabeled_dataset_cifar10(root='./Data', train=True, download=False,
-                                         transform=get_normalization(),
+                                         transform=get_normalization(self.dataset["name"]),
                                          data_indicies=labels_indices), \
                Unlabeled_dataset_cifar10(root='./Data', train=True, download=False,
-                                         transform=Wrapper(get_weak_transform(), get_strong_transform(self.dataset["name"])),
+                                         transform=Wrapper(get_weak_transform(), get_strong_transform(self.dataset["name"]), self.dataset["name"]),
                                          data_indicies=unlabeled_indices)
 
     def expand_indicies(self, labeled, unlabeled, num_images):

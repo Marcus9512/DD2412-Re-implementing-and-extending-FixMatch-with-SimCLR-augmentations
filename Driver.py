@@ -76,7 +76,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="Batch size", default=64)
     parser.add_argument("--epochs", type=int, help="number of epochs", default=200)
     parser.add_argument("--num_labels", type=int, help="number of labels", default=400)
-    parser.add_argument("--checkpoint_ratio", type=int, help="How often should the network backup the training", default=50)
+    parser.add_argument("--checkpoint_ratio", type=int, help="How often should the network backup the training", default=5)
     parser.add_argument("--resume", type=str, help="Resume training, path to file", default=None)
     parser.add_argument("--workers", type=int, help="Number of workers, higher values could give better performance, however, requiers more VRAM", default=4)
 
@@ -91,8 +91,10 @@ if __name__ == "__main__":
 
     if dataset["name"] == "CIFAR10":
         weight_decay = 0.0005
+        width = 2
     elif dataset["name"] == "CIFAR100":
         weight_decay = 0.001
+        width = 10
     else:
         logger.info(f"No valid dataset")
         exit(2)
@@ -102,7 +104,7 @@ if __name__ == "__main__":
 
     #model = torch.hub.load('pytorch/vision:v0.6.0', 'wideresnet50_2', pretrained=False, num_classes=10)
 
-    model = Wide_ResNet(28, 2, 0.3, num_classes)
+    model = Wide_ResNet(28, width, 0.3, num_classes)
     loss_function_X = nn.CrossEntropyLoss(reduction='mean')
     loss_function_U = nn.CrossEntropyLoss(reduction='none')
 

@@ -14,17 +14,30 @@ from PIL import Image
 
 cifar10_mean = (0.4914, 0.4822, 0.4465)
 cifar10_std = (0.2471, 0.2435, 0.2616)
+cifar100_mean = (0.5071, 0.4867, 0.4408)
+cifar100_std = (0.2675, 0.2565, 0.2761)
+
 
 
 class Wrapper:
-    def __init__(self, transform1, transform2):            
+    def __init__(self, transform1, transform2, dataset):
+        if dataset == "CIFAR10":
+            mean = cifar10_mean
+            std = cifar10_std
+        elif dataset == "CIFAR100":
+            mean = cifar100_mean
+            std = cifar100_std
+        else:
+            print("WRONG PARAMETER AT WRAPPER")
+            exit()
+
         self.transform1 = torchvision.transforms.Compose([transform1,
                                                         torchvision.transforms.functional.to_tensor,
-                                                        torchvision.transforms.Normalize(cifar10_mean, cifar10_std)
+                                                        torchvision.transforms.Normalize(mean, std)
                                                         ])
         self.transform2 = torchvision.transforms.Compose([transform2,
                                                         torchvision.transforms.functional.to_tensor,
-                                                        torchvision.transforms.Normalize(cifar10_mean, cifar10_std)
+                                                        torchvision.transforms.Normalize(mean, std)
                                                         ])
 
     def __call__(self, item):
