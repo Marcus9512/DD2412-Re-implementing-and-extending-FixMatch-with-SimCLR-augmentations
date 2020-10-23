@@ -43,8 +43,8 @@ class Unlabeled_dataset_cifar10(torchvision.datasets.CIFAR10):
 
     Influenced by: https://pytorch.org/docs/stable/_modules/torchvision/datasets/cifar.html#CIFAR10
     '''
-    def __init__(self, root, train, download, transform, data_indicies):
-        super().__init__(root=root, train=train, download=download, transform=transform)
+    def __init__(self, root, train, transform, data_indicies):
+        super().__init__(root=root, train=train, download=False, transform=transform)
         self.data = self.data[data_indicies]
         self.targets = np.array(self.targets)[data_indicies]
 

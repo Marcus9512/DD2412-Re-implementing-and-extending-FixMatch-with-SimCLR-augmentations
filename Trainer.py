@@ -104,12 +104,27 @@ class Trainer:
         if num_images != None:
             labels_indices, unlabeled_indices = self.expand_indicies(labels_indices, unlabeled_indices, num_images)
 
-        return Unlabeled_dataset_cifar10(root='./Data', train=True, download=False,
-                                         transform=get_normalization(self.dataset["name"]),
-                                         data_indicies=labels_indices), \
-               Unlabeled_dataset_cifar10(root='./Data', train=True, download=False,
-                                         transform=Wrapper(get_weak_transform(), get_strong_transform(self.dataset["name"]), self.dataset["name"]),
-                                         data_indicies=unlabeled_indices)
+        if self.dataset["name"] == "CIFAR10":
+
+            return Unlabeled_dataset_cifar10(root='./Data', train=True,
+                                             transform=get_normalization(self.dataset["name"]),
+                                             data_indicies=labels_indices), \
+                   Unlabeled_dataset_cifar10(root='./Data', train=True,
+                                             transform=Wrapper(get_weak_transform(), get_strong_transform(self.dataset["name"]), self.dataset["name"]),
+                                             data_indicies=unlabeled_indices)
+
+        elif self.dataset["name"] == "CIFAR100":
+            return Unlabeled_dataset_cifar100(root='./Data', train=True,
+                                             transform=get_normalization(self.dataset["name"]),
+                                             data_indicies=labels_indices), \
+                   Unlabeled_dataset_cifar100(root='./Data', train=True,
+                                             transform=Wrapper(get_weak_transform(),
+                                                               get_strong_transform(self.dataset["name"]),
+                                                               self.dataset["name"]),
+                                             data_indicies=unlabeled_indices)
+        else:
+            print("Error in split")
+            exit()
 
     def expand_indicies(self, labeled, unlabeled, num_images):
         print(len(labeled))
