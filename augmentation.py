@@ -44,8 +44,16 @@ class Wrapper:
         return self.transform1(item), self.transform2(item)
 
 
-def select_strong_augment(experiment_name, augment1="color", augment2="crop"):
-
+def select_strong_augment(experiment_name, dataset_name, augment1=None, augment2=None):
+    if experiment_name == "experiment1":
+        return get_strong_transform(dataset_name)
+    elif experiment_name == "experiment2":
+        exit()
+    elif experiment_name == "experiment3":
+        return get_sim_clr_augmentations(dataset_name, augment1, augment2)
+    else:
+        print("NO expperiment slected")
+        exit()
 
 def weak_augment(batch):
     #torchvision.utils.save_image(batch[0], "img_weak_1.png")
@@ -94,34 +102,34 @@ def get_strong_transform(dataset_name):
     return strong_transform
 
 
-def get_sim_clr_augmentations(augment1, augment2):
+def get_sim_clr_augmentations(dataset_name, augment1, augment2):
     if augment1 == "color":
-        a1 = colour_transform
+        a1 = colour_transform(1)
     elif augment1 == "sobel":
-        a1 = sobel_transform
+        a1 = sobel_transform()
     elif augment1 == "cutout":
-        a1 = cutout_transform
+        a1 = cutout_transform(dataset_name)
     elif augment1 == "crop":
-        a1 = crop_transform
+        a1 = crop_transform([32,32])
     else:
         print("NO VAILD a1 transform")
         exit()
 
     if augment2 == "color":
-        a2 = colour_transform
+        a2 = colour_transform(1)
     elif augment2 == "sobel":
-        a2 = sobel_transform
+        a2 = sobel_transform()
     elif augment2 == "cutout":
-        a2 = cutout_transform
+        a2 = cutout_transform(dataset_name)
     elif augment2 == "crop":
-        a2 = cutout_transform
+        a2 = crop_transform([32,32])
     else:
         print("NO VAILD a1 transform")
         exit()
 
     sim_clr_transform = torchvision.transforms.Compose([
-        a1(),
-        a2()
+        a1,
+        a2
     ])
 
     return sim_clr_transform

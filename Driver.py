@@ -72,6 +72,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, help="Which dataset should be used, supported: CIFAR10", required=True)
+    parser.add_argument("--experiment", type=str, help="Value for mu", required=True)
+
+    parser.add_argument("--augment1", type=str, help="color, crop, sobel, cutour", default=None)
+    parser.add_argument("--augment2", type=str, help="color, crop, sobel, cutour", default=None)
+
     parser.add_argument("--mu", type=int, help="Value for mu", default=7)
     parser.add_argument("--batch_size", type=int, help="Batch size", default=64)
     parser.add_argument("--epochs", type=int, help="number of epochs", default=200)
@@ -108,7 +113,9 @@ if __name__ == "__main__":
 
 
     timestamp = time.time()
-    trainer = Trainer(dataset, loss_function_X=loss_function_X, loss_function_U=loss_function_U,  batch_size=args.batch_size, mu=args.mu, workers=args.workers)
+    trainer = Trainer(dataset, loss_function_X=loss_function_X, loss_function_U=loss_function_U,
+                      batch_size=args.batch_size, mu=args.mu, workers=args.workers,
+                      augment1=args.augment1, augment2=args.augment2, experiment=args.experiment)
     path = trainer.train(model, learn_rate=0.03, weight_decay=weight_decay, momentum=0.9, epochs=args.epochs, num_labels=args.num_labels, threshold=0.95, resume_path=args.resume, checkpoint_ratio=args.checkpoint_ratio)
     trainer.test(path, model)
     trainer.close_summary()
