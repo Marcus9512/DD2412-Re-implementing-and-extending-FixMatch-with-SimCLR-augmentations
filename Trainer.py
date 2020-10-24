@@ -34,7 +34,7 @@ def get_normalization(dataset):
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function_X, loss_function_U, strong_transform, batch_size=10, mu=7, use_gpu=True, workers=4):
+    def __init__(self, dataset, loss_function_X, loss_function_U, batch_size=10, mu=7, use_gpu=True, workers=4):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -54,7 +54,6 @@ class Trainer:
         self.loss_function_X = loss_function_X
         self.loss_function_U = loss_function_U
         self.workers = workers
-        self.strong_transform = strong_transform
 
         # setup GPU if possible
         self.main_device = self.get_main_device(use_gpu)
@@ -111,7 +110,7 @@ class Trainer:
                                              transform=get_normalization(self.dataset["name"]),
                                              data_indicies=labels_indices), \
                    Unlabeled_dataset_cifar10(root='./Data', train=True,
-                                             transform=Wrapper(get_weak_transform(), self.strong_transform(), self.dataset["name"]),
+                                             transform=Wrapper(get_weak_transform(), get_strong_transform(self.dataset["name"]), self.dataset["name"]),
                                              data_indicies=unlabeled_indices)
 
         elif self.dataset["name"] == "CIFAR100":
@@ -120,7 +119,7 @@ class Trainer:
                                              data_indicies=labels_indices), \
                    Unlabeled_dataset_cifar100(root='./Data', train=True,
                                              transform=Wrapper(get_weak_transform(),
-                                                               self.strong_transform(), #get_strong_transform(self.dataset["name"])
+                                                                get_strong_transform(self.dataset["name"]),
                                                                self.dataset["name"]),
                                              data_indicies=unlabeled_indices)
         else:
