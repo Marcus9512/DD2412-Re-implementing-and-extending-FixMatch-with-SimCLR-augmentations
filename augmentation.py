@@ -285,7 +285,7 @@ class sobel_transform(object):
         img = cv2.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
 
         img = np_to_tensor(img/255)
-        img = torchvision.transforms.functional.to_pil_image(img)
+        img = torchvision.transforms.functional.to_pil_image(img).convert('RGB')
         return img
 """     
 def sobel_transform():

@@ -24,13 +24,21 @@ def get_transform():
     '''
     return transforms.Compose([transforms.ToTensor()])
 
-def get_transform_test():
+def get_transform_test(dataset):
     '''
     Based on nomalisation example from:
     https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
     :return:
     '''
-    return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
+
+    if dataset == "CIFAR10":
+        return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
+    elif dataset == "CIFAR100":
+        return transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))])
+    else:
+        print("Error in get test")
+        exit()
 
 def get_dataset(arg):
     '''
@@ -51,7 +59,7 @@ def get_dataset(arg):
     if arg.lower() == "cifar10":
         # Based from pytorch Cifar10, https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
         train = torchvision.datasets.CIFAR10(root='./Data', train=True, download=True, transform= get_transform())
-        test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform= get_transform_test())
+        test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform= get_transform_test("CIFAR10"))
         #unlabeled = Unlabeled_dataset_cifar10(root='./Unlabeled', train=True, download=True,
         #                                    transform= Wrapper(get_weak_transform(), get_strong_transform("CIFAR10")))
 
@@ -59,7 +67,7 @@ def get_dataset(arg):
 
     elif arg.lower() == "cifar100":
         train = torchvision.datasets.CIFAR100(root='./Data', train=True, download=True, transform= get_transform())
-        test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform= get_transform_test())
+        test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform= get_transform_test("CIFAR100"))
         #unlabeled = Unlabeled_dataset_cifar100(root='./Unlabeled', train=True, download=True,
         #                                      transform=Wrapper(get_weak_transform(), get_strong_transform("CIFAR100")))
         return get_return_format(train, test, 100, "CIFAR100")
