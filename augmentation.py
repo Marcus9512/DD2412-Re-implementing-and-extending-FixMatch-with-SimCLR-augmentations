@@ -50,6 +50,8 @@ def select_strong_augment(experiment_name, dataset_name, augment1=None, augment2
     elif experiment_name == "experiment2":
         exit()
     elif experiment_name == "experiment3":
+        print("A1 ",augment1)
+        print("A2 ",augment2)
         return get_sim_clr_augmentations(dataset_name, augment1, augment2)
     else:
         print("NO expperiment slected")
