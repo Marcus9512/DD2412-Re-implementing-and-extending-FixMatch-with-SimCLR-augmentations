@@ -82,8 +82,8 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, help="Which dataset should be used, supported: CIFAR10", required=True)
     parser.add_argument("--experiment", type=str, help="Value for mu", required=True)
 
-    parser.add_argument("--augment1", type=str, help="color, crop, sobel, cutour", default=None)
-    parser.add_argument("--augment2", type=str, help="color, crop, sobel, cutour", default=None)
+    parser.add_argument("--augment1", type=str, help="color, crop, sobel, cutout", default=None)
+    parser.add_argument("--augment2", type=str, help="color, crop, sobel, cutout", default=None)
 
     parser.add_argument("--mu", type=int, help="Value for mu", default=7)
     parser.add_argument("--batch_size", type=int, help="Batch size", default=64)
