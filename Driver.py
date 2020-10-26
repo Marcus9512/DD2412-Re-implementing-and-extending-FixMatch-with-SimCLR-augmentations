@@ -5,8 +5,6 @@ Our "main" method.
 
 import time
 import argparse
-import torchvision
-import torch.nn as nn
 
 from Models.Wideresnet import *
 

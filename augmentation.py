@@ -9,7 +9,6 @@ from randaugment import RandAugment
 import random
 import cv2
 import numpy as np
-from PIL import Image
 
 
 cifar10_mean = (0.4914, 0.4822, 0.4465)
@@ -48,7 +47,7 @@ def select_strong_augment(experiment_name, dataset_name, augment1=None, augment2
     if experiment_name == "experiment1":
         return get_strong_transform(dataset_name)
     elif experiment_name == "experiment3":
-        exit()
+        return get_strong_transform_two_randaugment(dataset_name)
     elif experiment_name == "experiment2":
         print("A1 ",augment1)
         print("A2 ",augment2)
@@ -70,39 +69,34 @@ def weak_augment(batch):
 
 def get_weak_transform():
     weak_transform = torchvision.transforms.Compose([
-        #torchvision.transforms.Normalize((-0.5/0.5, -0.5/0.5, -0.5/0.5), (1/0.5, 1/0.5, 1/0.5)),
-        #torchvision.transforms.functional.to_pil_image,
         torchvision.transforms.RandomHorizontalFlip(p=0.5),
         torchvision.transforms.RandomAffine(0, translate=(0.0625, 0.0625)),
-        #torchvision.transforms.functional.to_tensor,
-        #torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     return weak_transform
 
 def strong_augment(batch, dataset_name):
-    #torchvision.utils.save_image(batch[0], "img_strog_1.png")
 
     strong_transform = get_strong_transform(dataset_name)
 
     for i in range(len(batch)):
         batch[i] = strong_transform(batch[i].cpu())
 
-        #cutout(batch[i], cutout_height, cutout_width)
-
-    #torchvision.utils.save_image(batch[0], "img_strog_aug.png")
     return batch
     
 def get_strong_transform(dataset_name):
     strong_transform = torchvision.transforms.Compose([
-        #torchvision.transforms.Normalize((-0.5 / 0.5, -0.5 / 0.5, -0.5 / 0.5), (1 / 0.5, 1 / 0.5, 1 / 0.5)),
-        #torchvision.transforms.functional.to_pil_image,
         RandAugment(),
         cutout_transform(dataset_name),
-        #torchvision.transforms.functional.to_tensor
-        #torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     return strong_transform
 
+def get_strong_transform_two_randaugment(dataset_name):
+    strong_transform = torchvision.transforms.Compose([
+        RandAugment(),
+        RandAugment(),
+        cutout_transform(dataset_name),
+        ])
+    return strong_transform
 
 def get_sim_clr_augmentations(dataset_name, augment1, augment2):
     if augment1 == "color":
@@ -139,6 +133,13 @@ def get_sim_clr_augmentations(dataset_name, augment1, augment2):
 
 
 def SimCLR_augmentation(batch, transforms_to_do, dataset_name): #transforms_to_do = ["crop", "cutout", "colour", "sobel", "noise", "blur", "rotate"]
+    '''
+    DEPRECATED, not used anymore
+    :param batch:
+    :param transforms_to_do:
+    :param dataset_name:
+    :return:
+    '''
     torchvision.utils.save_image(batch[0], "img_SimCLR.png")
 
     for i in range(1):#range(len(batch)):
@@ -196,10 +197,6 @@ class cutout_transform(object):
             self.cutout_width = 8
 
     def __call__(self, img):
-        #img.save("cut.png")
-        #img = torchvision.transforms.functional.to_tensor(img)
-        #img_height = img.shape[1]
-        #img_width = img.shape[2]
 
         img.load()
         img_height, img_width= img.size
@@ -211,9 +208,6 @@ class cutout_transform(object):
         for x in range(cut_start_height, cut_start_height + self.cutout_height):
             for y in range(cut_start_width, cut_start_width + self.cutout_width):
                 img.putpixel((x, y), (0, 0, 0)) #PIL
-                #layer[x][y] = 0
-        #img = torchvision.transforms.functional.to_pil_image(img)
-        #img.save("cut_aug.png")
         return img
     
 
