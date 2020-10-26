@@ -30,8 +30,11 @@ def get_transform_test(dataset):
     '''
 
     if dataset == "CIFAR10":
+        print("Returning CIFAR10 dataset")
         return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
+
     elif dataset == "CIFAR100":
+        print("Returning CIFAR100 dataset")
         return transforms.Compose(
             [transforms.ToTensor(), transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))])
     else:
@@ -58,16 +61,11 @@ def get_dataset(arg):
         # Based from pytorch Cifar10, https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
         train = torchvision.datasets.CIFAR10(root='./Data', train=True, download=True, transform= get_transform())
         test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform= get_transform_test("CIFAR10"))
-        #unlabeled = Unlabeled_dataset_cifar10(root='./Unlabeled', train=True, download=True,
-        #                                    transform= Wrapper(get_weak_transform(), get_strong_transform("CIFAR10")))
-
         return get_return_format(train, test, 10, "CIFAR10")
 
     elif arg.lower() == "cifar100":
         train = torchvision.datasets.CIFAR100(root='./Data', train=True, download=True, transform= get_transform())
         test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform= get_transform_test("CIFAR100"))
-        #unlabeled = Unlabeled_dataset_cifar100(root='./Unlabeled', train=True, download=True,
-        #                                      transform=Wrapper(get_weak_transform(), get_strong_transform("CIFAR100")))
         return get_return_format(train, test, 100, "CIFAR100")
 
     return None

@@ -45,13 +45,19 @@ class Wrapper:
 
 def select_strong_augment(experiment_name, dataset_name, augment1=None, augment2=None):
     if experiment_name == "experiment1":
+        print("EXPERIMENT1")
         return get_strong_transform(dataset_name)
+
     elif experiment_name == "experiment3":
+        print("EXPERIMENT3")
         return get_strong_transform_two_randaugment(dataset_name)
+
     elif experiment_name == "experiment2":
+        print("EXPERIMENT2")
         print("A1 ",augment1)
         print("A2 ",augment2)
         return get_sim_clr_augmentations(dataset_name, augment1, augment2)
+
     else:
         print("NO expperiment slected")
         exit()

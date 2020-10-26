@@ -109,7 +109,9 @@ class Trainer:
             labels_indices, unlabeled_indices = self.expand_indicies(labels_indices, unlabeled_indices, num_images)
 
         if self.dataset["name"] == "CIFAR10":
+            # Note that Unlabeled_dataset_cifar10 and nlabeled_dataset_cifar100 can be used for labeled data aswell, it's just a data container
 
+            print("In split_labels_per_class returned CIFAR10")
             return Unlabeled_dataset_cifar10(root='./Data', train=True,
                                              transform=get_normalization(self.dataset["name"]),
                                              data_indicies=labels_indices), \
@@ -120,6 +122,7 @@ class Trainer:
                                              data_indicies=unlabeled_indices)
 
         elif self.dataset["name"] == "CIFAR100":
+            print("In split_labels_per_class returned CIFAR100")
             return Unlabeled_dataset_cifar100(root='./Data', train=True,
                                              transform=get_normalization(self.dataset["name"]),
                                              data_indicies=labels_indices), \
@@ -244,37 +247,26 @@ class Trainer:
         # set model to GPU or CPU
         model.to(self.main_device)
 
-        # split dataset to validation and train, then split train to labeled / unlabeled
-        #train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
-        # The formula represents the percent amount of data to unlabeled data
 
+        # Print dataset length
         trainset = self.dataset["train_set"]
-
         self.logger.info(f"Dataset length: {len(trainset)}")
 
+        # split dataset to validation and train, then split train to labeled / unlabeled
         labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], num_labels, num_images=65536) #num_image = 2^16
         #val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
 
         # Create dataloaders for each part of the dataset
-        #train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
         label_dataloader, unlabeled_dataloader = self.create_custom_dataloader(labeled, unlabeled)
 
 
+        # NOTE ASSIGN ANOTHER VALIDATION DATASET, CURRENTLY TEST IS ALSO SET AS VALIDATION. THIS IS JUST SO WE CAN
+        # SEE THE LOSS PLOT. IT DID NOT EFFECT OUR EVALUATION OF THE MODEL (Because we did not use it). WE IMPLEMENTED
+        # THE NETWORK TO BE ABLE TO USE A VALIDATION SET, HOWEVER, WE DO NOT HAVE ONE IN THIS REPOSITORY, HOWEVER THE
+        # CODE REQUIRE VALIDATION TO RUN.
         val_dataloader = ut.DataLoader(self.dataset["test_set"], batch_size=self.batch_size, shuffle=True,
                                         num_workers=self.workers, pin_memory=True)
-        '''
-        TO VERIFY NUMBER OF LABELS
-        store = np.zeros(10)
-        for j, (X, U) in enumerate(train_dataloader):
-            batch_X, label_X = X
-            for e in range(len(label_X)):
-                store[label_X[e]] += 1
 
-        print(store)
-        print(len(train_dataloader))
-        print(len(val_dataloader))
-        exit(-1)
-        '''
         # select optimizer type, current is SGD
         optimizer = opt.SGD(model.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum, nesterov=True)
         self.ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
@@ -286,8 +278,6 @@ class Trainer:
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
         
         scheduler = self.cosine_learning(optimizer, cosin)
-        #scheduler= self.get_cosine_schedule_with_warmup(optimizer,5, K)
-        #scheduler = CosineAnnealingWarmRestarts(optimizer,1024,eta_min=0.0002)
         start_epoch = 0
 
         # Load checkpoint
@@ -439,8 +429,12 @@ class Trainer:
         return self.save_network(model)
 
     def imshow(self, img):
+        '''
+        Take from https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+        :param img:
+        :return:
+        '''
         import matplotlib.pyplot as plt
-        #img = img / 2 + 0.5  # unnormalize
         npimg = img.numpy()
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
         plt.show()
