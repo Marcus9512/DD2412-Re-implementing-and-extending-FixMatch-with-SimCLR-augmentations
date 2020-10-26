@@ -17,7 +17,7 @@ The code consists of 3 experiments which can be toggled by the parameters.
 * Experiment 3 will run the the randaugmentation twice in the strong augmentation
 
 ## Run the network
-* Run `python Driver.py`
+* Run `python3 Driver.py`
 * Arguments, dataset is the only required argument `--dataset, --mu, --batch_size, --epochs, --num_labels, --checkpoint_ratio, --resume, --experiment, --augment1 and --augment2`
 * Required parameters `--dataset` and `--experiment`
 * `--dataset` Decides the dataset, can be set to CIFAR10 or CIFAR100

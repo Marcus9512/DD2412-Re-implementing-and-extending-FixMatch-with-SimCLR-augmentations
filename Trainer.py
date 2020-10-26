@@ -136,6 +136,13 @@ class Trainer:
             exit()
 
     def expand_indicies(self, labeled, unlabeled, num_images):
+        '''
+        Expand datasets to the wanted amount of epochs per iteration
+        :param labeled:
+        :param unlabeled:
+        :param num_images:
+        :return:
+        '''
         print(len(labeled))
         print(num_images)
         expand_label = np.random.choice(labeled, num_images - len(labeled))
@@ -472,20 +479,3 @@ class Trainer:
                 number_of_testdata += label.size(0)
 
         self.logger.info(f"Accuracy: {(correct / number_of_testdata) * 100}")
-
-
-'''
-Code graveyard
-
-    label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, shuffle=True,
-                                                num_workers=self.workers, pin_memory=True)
-    unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size*self.mu, shuffle=True,
-                                                num_workers=self.workers, pin_memory=True)
-
-    self.logger.info(f"Labeled {len(label_dataloader)}, Unlabeled {len(unlabeled_dataloader)}")
-    assert len(label_dataloader) == len(unlabeled_dataloader)
-    return zip(label_dataloader, unlabeled_dataloader)
-    
-    
-     
-'''
