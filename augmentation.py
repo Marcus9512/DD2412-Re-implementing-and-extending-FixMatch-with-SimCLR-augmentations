@@ -44,7 +44,6 @@ class Wrapper:
         return self.transform1(item), self.transform2(item)
 
 
-def select_strong_augment(experiment_name, augment1="color", augment2="crop"):
 
 
 def weak_augment(batch):
