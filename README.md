@@ -28,7 +28,8 @@ The code consists of 3 experiments which can be toggled by the parameters.
 * `--num_labels` The amount of labeled data for each class in the dataset. Default value: 25
 * `--checkpoint_ratio` How often a backup of the network will be saved. Default value: 5 (epochs)
 * `--resume` To start the network from a checkpoint, assign the path, for example, resume=Saved_checkpoints/name_of_checkpoint.pt.tar.
-* `--augment1`
+* `--augment1` Is used to set the first SimClr augmentation, can be set to sobel, color, crop and cutout
+* `--augment2` Is used to set the second SimClr augmentation, can be set to sobel, color, crop and cutout
 
 ## Tensorboard
 * You need tensorflow installed `pip install tensorflow`

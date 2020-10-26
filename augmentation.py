@@ -1,8 +1,3 @@
-#normaliseringar
-#sparande av bilder
-#hur anropa flera SimCLR anrop
-
-
 import torch
 import torchvision
 from randaugment import RandAugment
@@ -11,6 +6,7 @@ import cv2
 import numpy as np
 
 
+# std and mean taken from https://gist.github.com/weiaicunzai/e623931921efefd4c331622c344d8151
 cifar10_mean = (0.4914, 0.4822, 0.4465)
 cifar10_std = (0.2471, 0.2435, 0.2616)
 cifar100_mean = (0.5071, 0.4867, 0.4408)
@@ -105,6 +101,13 @@ def get_strong_transform_two_randaugment(dataset_name):
     return strong_transform
 
 def get_sim_clr_augmentations(dataset_name, augment1, augment2):
+    '''
+    Used to get simclr transformation
+    :param dataset_name:
+    :param augment1:
+    :param augment2:
+    :return:
+    '''
     if augment1 == "color":
         a1 = colour_transform(1)
     elif augment1 == "sobel":
@@ -256,13 +259,6 @@ class rotate_transform(object):
         img = torchvision.transforms.functional.rotate(img = img, angle = rotate_angle)
         #img = torchvision.transforms.functional.to_tensor(img)
         return img
-"""
-def rotate_transform():
-    rotater = torchvision.transforms.Compose([
-        rotate_function
-        ])
-    return rotater
-"""
 
 #def sobel_function(img):
 class sobel_transform(object):
@@ -287,13 +283,6 @@ class sobel_transform(object):
         img = np_to_tensor(img/255)
         img = torchvision.transforms.functional.to_pil_image(img).convert('RGB')
         return img
-"""     
-def sobel_transform():
-    sobel_transform = torchvision.transforms.Compose([
-        sobel_function
-        ])
-    return sobel_transform
-"""
 
 #def noise_function(img):
 class noise_transform(object):
@@ -312,13 +301,7 @@ class noise_transform(object):
         img = img.type(torch.float32)
         img = torchvision.transforms.functional.to_pil_image(img)
         return img
-"""
-def noise_transform():
-    noise_transform = torchvision.transforms.Compose([
-        noise_function
-        ])
-    return noise_transform
-"""
+
 #def blur_function(img):
 class blur_transform(object):
     def __init__(self):
@@ -337,14 +320,6 @@ class blur_transform(object):
             img = np_to_tensor(img/255)
             img = torchvision.transforms.functional.to_pil_image(img)
         return img
-"""
-def blur_transform():
-    blur_transform = torchvision.transforms.Compose([
-        blur_function
-        ])
-    return blur_transform
-"""
-
 
 
 def tensor_to_np(img):

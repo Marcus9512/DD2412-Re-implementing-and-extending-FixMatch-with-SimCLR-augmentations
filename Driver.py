@@ -26,6 +26,8 @@ def get_transform_test(dataset):
     '''
     Based on nomalisation example from:
     https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+
+    # std and mean taken from https://gist.github.com/weiaicunzai/e623931921efefd4c331622c344d8151
     :return:
     '''
 

@@ -5,13 +5,12 @@ import torchvision.transforms as transforms
 import torch.optim as opt
 import torch.utils.tensorboard as tb
 
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from Custom_dataset.Unlabeled_dataset import *
 from os import path
 from datetime import datetime
 from sklearn.model_selection import *
 from torch_ema.ema import ExponentialMovingAverage
-from tqdm import tqdm , trange
+from tqdm import tqdm
 from augmentation import *
 
 
@@ -21,6 +20,9 @@ def get_normalization(dataset):
     '''
     Based on nomalisation example from:
     https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+
+    # std and mean taken from https://gist.github.com/weiaicunzai/e623931921efefd4c331622c344d8151
+
     :return:
     '''
     if dataset == "CIFAR10":
@@ -161,7 +163,6 @@ class Trainer:
 
         unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size * self.mu, shuffle=True,
                                              num_workers=self.workers, pin_memory=True, drop_last=True)
-
 
 
         self.logger.info(f"Labeled length: {len(label_dataloader)}, unlabeled length: {len(unlabeled_dataloader)}")
@@ -359,7 +360,6 @@ class Trainer:
                         # remove from vram
                         del batch_X
 
-                        #input_U_wa = weak_augment(batch_U).to(device=self.main_device)
                         weak_a = weak_a.to(device=self.main_device)
                         out_U_wa = model(weak_a)
 
@@ -379,8 +379,7 @@ class Trainer:
                         #count the number of unlabel images that will affect the loss
                         num_of_pseudo_labels = torch.nonzero(mask,as_tuple=False)
                         i+=len(num_of_pseudo_labels)    
-                        
-                        #input_U_sa = strong_augment(batch_U).to(device=self.main_device)
+
                         strong_a = strong_a.to(device=self.main_device)
                         out_U_sa = model(strong_a)
                         loss_U = torch.mean(criterion_U(out_U_sa, labels_U) * mask)
