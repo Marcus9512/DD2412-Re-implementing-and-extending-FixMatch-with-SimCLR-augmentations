@@ -1,26 +1,40 @@
 import os
 import math
 import logging
-import torch
+import torchvision.transforms as transforms
 import torch.optim as opt
-import torch.utils.data as ut
 import torch.utils.tensorboard as tb
 
-from cosine_annealing import LegacyCosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from Custom_dataset.Unlabeled_dataset import *
 from os import path
 from datetime import datetime
-from Custom_dataset import Labeled_Unlabeled_dataset as lu
-from augmentation import *
 from sklearn.model_selection import *
 from torch_ema.ema import ExponentialMovingAverage
 from tqdm import tqdm , trange
+from augmentation import *
 
 
 LOGGER_NAME = "Trainer"
 
+def get_normalization(dataset):
+    '''
+    Based on nomalisation example from:
+    https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+    :return:
+    '''
+    if dataset == "CIFAR10":
+        return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
+    elif dataset == "CIFAR100":
+        return transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))])
+    else:
+        print("Error in nomalization")
+        exit()
+
 class Trainer:
 
-    def __init__(self, dataset, loss_function, batch_size=10, mu=7, use_gpu=True, workers=4):
+    def __init__(self, dataset, loss_function_X, loss_function_U, batch_size=10, mu=7, use_gpu=True, workers=4):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -37,7 +51,8 @@ class Trainer:
         self.logger = logger
         self.dataset = dataset
         self.batch_size = batch_size
-        self.loss_function = loss_function
+        self.loss_function_X = loss_function_X
+        self.loss_function_U = loss_function_U
         self.workers = workers
 
         # setup GPU if possible
@@ -81,50 +96,61 @@ class Trainer:
                 "Could not find pycuda and thus not show amazing stats about youre GPU, have you installed CUDA?")
             pass
 
-    def split_dataset(self, dataset, percent_to_set2):
-        assert percent_to_set2 < 1.0
-        assert percent_to_set2 > 0
-
-        size_of_dataset = len(dataset)
-        length_set1 = int((1.0 - percent_to_set2)*size_of_dataset)
-        length_set2 = int(percent_to_set2*size_of_dataset)
-
-        # compensate for integer division
-        length_set2 = length_set2 if (length_set1 + length_set2) == len(dataset) else length_set2+1
-
-        set1, set2 = ut.random_split(dataset, [length_set1, length_set2])
-        return set1, set2
-
-    def split_labels_per_class(self, dataset, num_labels):
+    def split_labels_per_class(self, dataset, num_labels, num_images = None):
 
         indices = np.arange(len(dataset))
         labels_indices, unlabeled_indices = train_test_split(indices, train_size=num_labels * self.dataset["num_classes"],
                                                        stratify=dataset.targets)
+        if num_images != None:
+            labels_indices, unlabeled_indices = self.expand_indicies(labels_indices, unlabeled_indices, num_images)
 
-        return ut.Subset(dataset, labels_indices), ut.Subset(dataset, unlabeled_indices)
+        if self.dataset["name"] == "CIFAR10":
+
+            return Unlabeled_dataset_cifar10(root='./Data', train=True,
+                                             transform=get_normalization(self.dataset["name"]),
+                                             data_indicies=labels_indices), \
+                   Unlabeled_dataset_cifar10(root='./Data', train=True,
+                                             transform=Wrapper(get_weak_transform(), get_strong_transform(self.dataset["name"]), self.dataset["name"]),
+                                             data_indicies=unlabeled_indices)
+
+        elif self.dataset["name"] == "CIFAR100":
+            return Unlabeled_dataset_cifar100(root='./Data', train=True,
+                                             transform=get_normalization(self.dataset["name"]),
+                                             data_indicies=labels_indices), \
+                   Unlabeled_dataset_cifar100(root='./Data', train=True,
+                                             transform=Wrapper(get_weak_transform(),
+                                                                get_strong_transform(self.dataset["name"]),
+                                                               self.dataset["name"]),
+                                             data_indicies=unlabeled_indices)
+        else:
+            print("Error in split")
+            exit()
+
+    def expand_indicies(self, labeled, unlabeled, num_images):
+        print(len(labeled))
+        print(num_images)
+        expand_label = np.random.choice(labeled, num_images - len(labeled))
+        expand_unlabel = np.random.choice(unlabeled, (num_images*self.mu) - len(unlabeled))
+
+        labeled = np.append(labeled, expand_label)
+        unlabeled = np.append(unlabeled, expand_unlabel)
+
+
+        return labeled, unlabeled
 
 
     def create_custom_dataloader(self, label, unlabeled):
-        '''
-        Creates a custom dataset of label and unlabeled
-        :param label:
-        :param unlabeled:
-        :return:
-        '''
-        # This is a custom dataset located in the file Labeled_Unlabeled_dataset.py
-        l_u_dataset = lu.L_U_Dataset(label, unlabeled, self.mu)
-
-        return ut.DataLoader(l_u_dataset, batch_size=self.batch_size, shuffle=True,
-                                         num_workers=self.workers, pin_memory=True)
-
-    def create_custom_dataloader2(self, label, unlabeled):
         label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, shuffle=True,
-                                         num_workers=self.workers, pin_memory=True)
+                                         num_workers=self.workers, pin_memory=True, drop_last=True)
+
         unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size * self.mu, shuffle=True,
-                                             num_workers=self.workers, pin_memory=True)
+                                             num_workers=self.workers, pin_memory=True, drop_last=True)
+
+
 
         self.logger.info(f"Labeled length: {len(label_dataloader)}, unlabeled length: {len(unlabeled_dataloader)}")
         return label_dataloader, unlabeled_dataloader
+
 
     def validate_directory(self, save_path):
         '''
@@ -192,7 +218,8 @@ class Trainer:
     def cosine_learning(self, optimizer, function):
         return opt.lr_scheduler.LambdaLR(optimizer, function)
 
-    def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.9, checkpoint_ratio=None, resume_path=None):
+
+    def train(self, model, learn_rate, weight_decay, momentum, num_labels=250, epochs=10, percent_to_validation=0.2,lambda_U=1, threshold=0.95, checkpoint_ratio=None, resume_path=None):
         '''
 
         :param model:
@@ -214,26 +241,21 @@ class Trainer:
         # split dataset to validation and train, then split train to labeled / unlabeled
         #train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
         # The formula represents the percent amount of data to unlabeled data
-        #labeled, unlabeled = self.split_dataset(train, self.mu / (1 + self.mu))
 
         trainset = self.dataset["train_set"]
 
         self.logger.info(f"Dataset length: {len(trainset)}")
 
-        labeled, rest = self.split_labels_per_class(self.dataset["train_set"], num_labels)
+        labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], num_labels, num_images=65536) #num_image = 2^16
         #val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
-
-        self.logger.info(f"labeled len {len(labeled)} rest len {len(rest)}")
 
         # Create dataloaders for each part of the dataset
         #train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
-        label_dataloader, val_dataloader = self.create_custom_dataloader2(labeled, rest)
+        label_dataloader, unlabeled_dataloader = self.create_custom_dataloader(labeled, unlabeled)
 
-        unlabeled_dataloader = ut.DataLoader(self.dataset["unlabeled"], batch_size=self.batch_size*self.mu, shuffle=True,
-                                       num_workers=self.workers, pin_memory=True)
 
-        #val_dataloader = ut.DataLoader(val, batch_size=self.batch_size, shuffle=True,
-        #                               num_workers=self.workers, pin_memory=True)
+        val_dataloader = ut.DataLoader(self.dataset["test_set"], batch_size=self.batch_size, shuffle=True,
+                                        num_workers=self.workers, pin_memory=True)
         '''
         TO VERIFY NUMBER OF LABELS
         store = np.zeros(10)
@@ -252,13 +274,14 @@ class Trainer:
         self.ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
 
         #K total number of steps
-        #Weight decay = cos(7*pi*k/(16K)) where k is current step and K total nr of steps
-        K =  min(len(label_dataloader), len(unlabeled_dataloader)) * epochs
-        #scheduler = LegacyCosineAnnealingLR(optimizer, 16*epochs/7)
+
+        K = 1048576 #(2^20)
 
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
+        
         scheduler = self.cosine_learning(optimizer, cosin)
-
+        #scheduler= self.get_cosine_schedule_with_warmup(optimizer,5, K)
+        #scheduler = CosineAnnealingWarmRestarts(optimizer,1024,eta_min=0.0002)
         start_epoch = 0
 
         # Load checkpoint
@@ -276,8 +299,8 @@ class Trainer:
                 exit()
 
         # set the wanted loss function to criterion
-        criterion_X = self.loss_function
-        criterion_U = self.loss_function
+        criterion_X = self.loss_function_X
+        criterion_U = self.loss_function_U
 
         model.train()
         for e in range(start_epoch, epochs):
@@ -292,19 +315,22 @@ class Trainer:
                     current_dataloader = val_dataloader
                     length = len(val_dataloader)
                     model.eval()
-
                 combined_loss = 0
+                combined_loss_x = 0
+                combined_loss_u = 0
                 i = 0
                 pbar = tqdm(total=length)
                 for j, (X, U) in enumerate(current_dataloader):
-
                     if session == "training":
                         batch_X, label_X = X
-                        weak_a, strong_a = U
+                        (weak_a, strong_a), _ = U
+
+                        label_X = label_X.long()
 
                         #self.imshow(torchvision.utils.make_grid(batch_X))
+                        #self.imshow(torchvision.utils.make_grid(strong_a))
                         #self.imshow(torchvision.utils.make_grid(weak_a))
-                        #print('GroundTruth: ', label_X)
+
                     else:
                         # Verification have no unlabeled dataset
                         batch_X, label_X = (X, U)
@@ -322,7 +348,7 @@ class Trainer:
                         # Reset gradients between training
                         optimizer.zero_grad()
                         out_X = model(batch_X)
-                        loss_X = torch.mean(criterion_X(out_X, label_X))
+                        loss_X = criterion_X(out_X, label_X)
 
                         loss_X.detach()
                         label_X.detach()
@@ -362,13 +388,16 @@ class Trainer:
 
                         loss_U.detach()
 
+                        combined_loss_x += loss_X.item()
+                        combined_loss_u += loss_U.item()
+
                         loss = loss_X + lambda_U * loss_U
                     else:
                         # Disable gradient modifications
                         with torch.no_grad():
                             out = model(batch_X)
 
-                            loss = torch.mean(criterion_X(out, label_X))
+                            loss = criterion_X(out, label_X)
 
                     combined_loss += loss.item()
 
@@ -378,15 +407,19 @@ class Trainer:
                         optimizer.step()
                         scheduler.step()
                         self.ema.update(model.parameters())
-                    if (i % 1000 == 0):
-                        self.logger.info(f"{session} img: {i}")
+
 
                     i += label_X.size(0)
                     pbar.update(1)
 
                 combined_loss /= i
-                self.logger.info(f"{session} loss: {combined_loss}")
+                combined_loss_x /= i
+                combined_loss_u /= i
+
+                self.logger.info(f"{session} loss: {combined_loss} loss_x: {combined_loss_x} loss_u: {combined_loss_u}")
                 self.summary.add_scalar('Loss/' + session, combined_loss, e)
+                self.summary.add_scalar('Loss_x/' + session, combined_loss_x, e)
+                self.summary.add_scalar('Loss_u/' + session, combined_loss_u, e)
 
             if e % checkpoint_ratio == 0:
                 checkpoint = {

@@ -12,23 +12,36 @@ import numpy as np
 from PIL import Image
 
 
+cifar10_mean = (0.4914, 0.4822, 0.4465)
+cifar10_std = (0.2471, 0.2435, 0.2616)
+cifar100_mean = (0.5071, 0.4867, 0.4408)
+cifar100_std = (0.2675, 0.2565, 0.2761)
 
 
 
 class Wrapper:
-    def __init__(self, transform1, transform2):            
+    def __init__(self, transform1, transform2, dataset):
+        if dataset == "CIFAR10":
+            mean = cifar10_mean
+            std = cifar10_std
+        elif dataset == "CIFAR100":
+            mean = cifar100_mean
+            std = cifar100_std
+        else:
+            print("WRONG PARAMETER AT WRAPPER")
+            exit()
+
         self.transform1 = torchvision.transforms.Compose([transform1,
                                                         torchvision.transforms.functional.to_tensor,
-                                                        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                                        torchvision.transforms.Normalize(mean, std)
                                                         ])
         self.transform2 = torchvision.transforms.Compose([transform2,
                                                         torchvision.transforms.functional.to_tensor,
-                                                        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                                        torchvision.transforms.Normalize(mean, std)
                                                         ])
 
     def __call__(self, item):
         return self.transform1(item), self.transform2(item)
-
 
 
 
@@ -55,10 +68,6 @@ def get_weak_transform():
         ])
     return weak_transform
 
-
-
-
-
 def strong_augment(batch, dataset_name):
     #torchvision.utils.save_image(batch[0], "img_strog_1.png")
 
@@ -75,15 +84,46 @@ def strong_augment(batch, dataset_name):
 def get_strong_transform(dataset_name):
     strong_transform = torchvision.transforms.Compose([
         #torchvision.transforms.Normalize((-0.5 / 0.5, -0.5 / 0.5, -0.5 / 0.5), (1 / 0.5, 1 / 0.5, 1 / 0.5)),
-        cutout_transform(dataset_name),
         #torchvision.transforms.functional.to_pil_image,
         RandAugment(),
+        cutout_transform(dataset_name),
         #torchvision.transforms.functional.to_tensor
         #torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     return strong_transform
 
 
+def get_sim_clr_augmentations(augment1, augment2):
+    if augment1 == "color":
+        a1 = colour_transform
+    elif augment1 == "sobel":
+        a1 = sobel_transform
+    elif augment1 == "cutout":
+        a1 = cutout_transform
+    elif augment1 == "crop":
+        a1 = crop_transform
+    else:
+        print("NO VAILD a1 transform")
+        exit()
+
+    if augment2 == "color":
+        a2 = colour_transform
+    elif augment2 == "sobel":
+        a2 = sobel_transform
+    elif augment2 == "cutout":
+        a2 = cutout_transform
+    elif augment2 == "crop":
+        a2 = cutout_transform
+    else:
+        print("NO VAILD a1 transform")
+        exit()
+
+    sim_clr_transform = torchvision.transforms.Compose([
+        a1(),
+        a2()
+    ])
+
+    return sim_clr_transform
 
 
 
