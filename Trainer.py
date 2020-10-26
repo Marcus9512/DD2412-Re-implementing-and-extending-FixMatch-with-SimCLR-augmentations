@@ -5,13 +5,12 @@ import torchvision.transforms as transforms
 import torch.optim as opt
 import torch.utils.tensorboard as tb
 
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from Custom_dataset.Unlabeled_dataset import *
 from os import path
 from datetime import datetime
 from sklearn.model_selection import *
 from torch_ema.ema import ExponentialMovingAverage
-from tqdm import tqdm , trange
+from tqdm import tqdm
 from augmentation import *
 
 
@@ -21,6 +20,9 @@ def get_normalization(dataset):
     '''
     Based on nomalisation example from:
     https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+
+    # std and mean taken from https://gist.github.com/weiaicunzai/e623931921efefd4c331622c344d8151
+
     :return:
     '''
     if dataset == "CIFAR10":
@@ -34,7 +36,7 @@ def get_normalization(dataset):
 
 class Trainer:
 
-    def __init__(self, dataset, loss_function_X, loss_function_U, batch_size=10, mu=7, use_gpu=True, workers=4):
+    def __init__(self, dataset, loss_function_X, loss_function_U, experiment, augment1, augment2, batch_size=10, mu=7, use_gpu=True, workers=4):
         '''
         :param data_path: path to the data folder
         :param use_gpu: true if the program should use GPU
@@ -54,6 +56,10 @@ class Trainer:
         self.loss_function_X = loss_function_X
         self.loss_function_U = loss_function_U
         self.workers = workers
+
+        self.experiment = experiment
+        self.augment1 = augment1
+        self.augment2 = augment2
 
         # setup GPU if possible
         self.main_device = self.get_main_device(use_gpu)
@@ -105,21 +111,26 @@ class Trainer:
             labels_indices, unlabeled_indices = self.expand_indicies(labels_indices, unlabeled_indices, num_images)
 
         if self.dataset["name"] == "CIFAR10":
+            # Note that Unlabeled_dataset_cifar10 and nlabeled_dataset_cifar100 can be used for labeled data aswell, it's just a data container
 
+            print("In split_labels_per_class returned CIFAR10")
             return Unlabeled_dataset_cifar10(root='./Data', train=True,
                                              transform=get_normalization(self.dataset["name"]),
                                              data_indicies=labels_indices), \
                    Unlabeled_dataset_cifar10(root='./Data', train=True,
-                                             transform=Wrapper(get_weak_transform(), get_strong_transform(self.dataset["name"]), self.dataset["name"]),
+                                             transform=Wrapper(get_weak_transform(),
+                                                               select_strong_augment(self.experiment, self.dataset["name"], augment1=self.augment1, augment2=self.augment2),
+                                                               self.dataset["name"]),
                                              data_indicies=unlabeled_indices)
 
         elif self.dataset["name"] == "CIFAR100":
+            print("In split_labels_per_class returned CIFAR100")
             return Unlabeled_dataset_cifar100(root='./Data', train=True,
                                              transform=get_normalization(self.dataset["name"]),
                                              data_indicies=labels_indices), \
                    Unlabeled_dataset_cifar100(root='./Data', train=True,
                                              transform=Wrapper(get_weak_transform(),
-                                                                get_strong_transform(self.dataset["name"]),
+                                                               select_strong_augment(self.experiment, self.dataset["name"], augment1=self.augment1, augment2=self.augment2),
                                                                self.dataset["name"]),
                                              data_indicies=unlabeled_indices)
         else:
@@ -127,6 +138,13 @@ class Trainer:
             exit()
 
     def expand_indicies(self, labeled, unlabeled, num_images):
+        '''
+        Expand datasets to the wanted amount of epochs per iteration
+        :param labeled:
+        :param unlabeled:
+        :param num_images:
+        :return:
+        '''
         print(len(labeled))
         print(num_images)
         expand_label = np.random.choice(labeled, num_images - len(labeled))
@@ -145,7 +163,6 @@ class Trainer:
 
         unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size * self.mu, shuffle=True,
                                              num_workers=self.workers, pin_memory=True, drop_last=True)
-
 
 
         self.logger.info(f"Labeled length: {len(label_dataloader)}, unlabeled length: {len(unlabeled_dataloader)}")
@@ -238,37 +255,26 @@ class Trainer:
         # set model to GPU or CPU
         model.to(self.main_device)
 
-        # split dataset to validation and train, then split train to labeled / unlabeled
-        #train, val = self.split_dataset(self.dataset["train_set"], percent_to_validation)
-        # The formula represents the percent amount of data to unlabeled data
 
+        # Print dataset length
         trainset = self.dataset["train_set"]
-
         self.logger.info(f"Dataset length: {len(trainset)}")
 
+        # split dataset to validation and train, then split train to labeled / unlabeled
         labeled, unlabeled = self.split_labels_per_class(self.dataset["train_set"], num_labels, num_images=65536) #num_image = 2^16
         #val, unlabeled = self.split_dataset(unlabeled, self.mu / (1+self.mu))
 
         # Create dataloaders for each part of the dataset
-        #train_dataloader = self.create_custom_dataloader(labeled, unlabeled)
         label_dataloader, unlabeled_dataloader = self.create_custom_dataloader(labeled, unlabeled)
 
 
+        # NOTE ASSIGN ANOTHER VALIDATION DATASET, CURRENTLY TEST IS ALSO SET AS VALIDATION. THIS IS JUST SO WE CAN
+        # SEE THE LOSS PLOT. IT DID NOT EFFECT OUR EVALUATION OF THE MODEL (Because we did not use it). WE IMPLEMENTED
+        # THE NETWORK TO BE ABLE TO USE A VALIDATION SET, HOWEVER, WE DO NOT HAVE ONE IN THIS REPOSITORY, HOWEVER THE
+        # CODE REQUIRE VALIDATION TO RUN.
         val_dataloader = ut.DataLoader(self.dataset["test_set"], batch_size=self.batch_size, shuffle=True,
                                         num_workers=self.workers, pin_memory=True)
-        '''
-        TO VERIFY NUMBER OF LABELS
-        store = np.zeros(10)
-        for j, (X, U) in enumerate(train_dataloader):
-            batch_X, label_X = X
-            for e in range(len(label_X)):
-                store[label_X[e]] += 1
 
-        print(store)
-        print(len(train_dataloader))
-        print(len(val_dataloader))
-        exit(-1)
-        '''
         # select optimizer type, current is SGD
         optimizer = opt.SGD(model.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum, nesterov=True)
         self.ema = ExponentialMovingAverage(model.parameters(), decay=0.995)
@@ -280,8 +286,6 @@ class Trainer:
         cosin = lambda k: max(0., math.cos(7. * math.pi * k / (16. * K)))
         
         scheduler = self.cosine_learning(optimizer, cosin)
-        #scheduler= self.get_cosine_schedule_with_warmup(optimizer,5, K)
-        #scheduler = CosineAnnealingWarmRestarts(optimizer,1024,eta_min=0.0002)
         start_epoch = 0
 
         # Load checkpoint
@@ -356,7 +360,6 @@ class Trainer:
                         # remove from vram
                         del batch_X
 
-                        #input_U_wa = weak_augment(batch_U).to(device=self.main_device)
                         weak_a = weak_a.to(device=self.main_device)
                         out_U_wa = model(weak_a)
 
@@ -376,8 +379,7 @@ class Trainer:
                         #count the number of unlabel images that will affect the loss
                         num_of_pseudo_labels = torch.nonzero(mask,as_tuple=False)
                         i+=len(num_of_pseudo_labels)    
-                        
-                        #input_U_sa = strong_augment(batch_U).to(device=self.main_device)
+
                         strong_a = strong_a.to(device=self.main_device)
                         out_U_sa = model(strong_a)
                         loss_U = torch.mean(criterion_U(out_U_sa, labels_U) * mask)
@@ -433,8 +435,12 @@ class Trainer:
         return self.save_network(model)
 
     def imshow(self, img):
+        '''
+        Take from https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+        :param img:
+        :return:
+        '''
         import matplotlib.pyplot as plt
-        #img = img / 2 + 0.5  # unnormalize
         npimg = img.numpy()
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
         plt.show()
@@ -472,20 +478,3 @@ class Trainer:
                 number_of_testdata += label.size(0)
 
         self.logger.info(f"Accuracy: {(correct / number_of_testdata) * 100}")
-
-
-'''
-Code graveyard
-
-    label_dataloader = ut.DataLoader(label, batch_size=self.batch_size, shuffle=True,
-                                                num_workers=self.workers, pin_memory=True)
-    unlabeled_dataloader = ut.DataLoader(unlabeled, batch_size=self.batch_size*self.mu, shuffle=True,
-                                                num_workers=self.workers, pin_memory=True)
-
-    self.logger.info(f"Labeled {len(label_dataloader)}, Unlabeled {len(unlabeled_dataloader)}")
-    assert len(label_dataloader) == len(unlabeled_dataloader)
-    return zip(label_dataloader, unlabeled_dataloader)
-    
-    
-     
-'''

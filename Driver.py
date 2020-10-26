@@ -5,8 +5,6 @@ Our "main" method.
 
 import time
 import argparse
-import torchvision
-import torch.nn as nn
 
 from Models.Wideresnet import *
 
@@ -24,13 +22,26 @@ def get_transform():
     '''
     return transforms.Compose([transforms.ToTensor()])
 
-def get_transform_test():
+def get_transform_test(dataset):
     '''
     Based on nomalisation example from:
     https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+
+    # std and mean taken from https://gist.github.com/weiaicunzai/e623931921efefd4c331622c344d8151
     :return:
     '''
-    return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
+
+    if dataset == "CIFAR10":
+        print("Returning CIFAR10 dataset")
+        return transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
+
+    elif dataset == "CIFAR100":
+        print("Returning CIFAR100 dataset")
+        return transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))])
+    else:
+        print("Error in get test")
+        exit()
 
 def get_dataset(arg):
     '''
@@ -51,17 +62,12 @@ def get_dataset(arg):
     if arg.lower() == "cifar10":
         # Based from pytorch Cifar10, https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
         train = torchvision.datasets.CIFAR10(root='./Data', train=True, download=True, transform= get_transform())
-        test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform= get_transform_test())
-        #unlabeled = Unlabeled_dataset_cifar10(root='./Unlabeled', train=True, download=True,
-        #                                    transform= Wrapper(get_weak_transform(), get_strong_transform("CIFAR10")))
-
+        test = torchvision.datasets.CIFAR10(root='./Data', train=False, download=True, transform= get_transform_test("CIFAR10"))
         return get_return_format(train, test, 10, "CIFAR10")
 
     elif arg.lower() == "cifar100":
         train = torchvision.datasets.CIFAR100(root='./Data', train=True, download=True, transform= get_transform())
-        test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform= get_transform_test())
-        #unlabeled = Unlabeled_dataset_cifar100(root='./Unlabeled', train=True, download=True,
-        #                                      transform=Wrapper(get_weak_transform(), get_strong_transform("CIFAR100")))
+        test = torchvision.datasets.CIFAR100(root='./Data', train=False, download=True, transform= get_transform_test("CIFAR100"))
         return get_return_format(train, test, 100, "CIFAR100")
 
     return None
@@ -72,10 +78,15 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, help="Which dataset should be used, supported: CIFAR10", required=True)
+    parser.add_argument("--experiment", type=str, help="Experiment typ, experiment1 experiment2 or experiment3", required=True)
+
+    parser.add_argument("--augment1", type=str, help="color, crop, sobel, cutout", default=None)
+    parser.add_argument("--augment2", type=str, help="color, crop, sobel, cutout", default=None)
+
     parser.add_argument("--mu", type=int, help="Value for mu", default=7)
     parser.add_argument("--batch_size", type=int, help="Batch size", default=64)
-    parser.add_argument("--epochs", type=int, help="number of epochs", default=200)
-    parser.add_argument("--num_labels", type=int, help="number of labels", default=400)
+    parser.add_argument("--epochs", type=int, help="number of epochs", default=25)
+    parser.add_argument("--num_labels", type=int, help="number of labels", default=25)
     parser.add_argument("--checkpoint_ratio", type=int, help="How often should the network backup the training", default=5)
     parser.add_argument("--resume", type=str, help="Resume training, path to file", default=None)
     parser.add_argument("--workers", type=int, help="Number of workers, higher values could give better performance, however, requiers more VRAM", default=4)
@@ -108,7 +119,9 @@ if __name__ == "__main__":
 
 
     timestamp = time.time()
-    trainer = Trainer(dataset, loss_function_X=loss_function_X, loss_function_U=loss_function_U,  batch_size=args.batch_size, mu=args.mu, workers=args.workers)
+    trainer = Trainer(dataset, loss_function_X=loss_function_X, loss_function_U=loss_function_U,
+                      batch_size=args.batch_size, mu=args.mu, workers=args.workers,
+                      augment1=args.augment1, augment2=args.augment2, experiment=args.experiment)
     path = trainer.train(model, learn_rate=0.03, weight_decay=weight_decay, momentum=0.9, epochs=args.epochs, num_labels=args.num_labels, threshold=0.95, resume_path=args.resume, checkpoint_ratio=args.checkpoint_ratio)
     trainer.test(path, model)
     trainer.close_summary()

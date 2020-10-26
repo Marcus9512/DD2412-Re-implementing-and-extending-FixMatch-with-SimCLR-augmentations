@@ -2,10 +2,14 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import torch
+'''
+Taken from:
+
 #Created by Samuel G. Fadel - https://github.com/fadel/pytorch_ema
 #PyTorch library for computing moving averages of model parameters.
 
 # Partially based on: https://github.com/tensorflow/tensorflow/blob/r1.13/tensorflow/python/training/moving_averages.py
+'''
 class ExponentialMovingAverage:
     """
     Maintains (exponential) moving average of a set of parameters.

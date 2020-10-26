@@ -1,17 +1,12 @@
-#normaliseringar
-#sparande av bilder
-#hur anropa flera SimCLR anrop
-
-
 import torch
 import torchvision
 from randaugment import RandAugment
 import random
 import cv2
 import numpy as np
-from PIL import Image
 
 
+# std and mean taken from https://gist.github.com/weiaicunzai/e623931921efefd4c331622c344d8151
 cifar10_mean = (0.4914, 0.4822, 0.4465)
 cifar10_std = (0.2471, 0.2435, 0.2616)
 cifar100_mean = (0.5071, 0.4867, 0.4408)
@@ -44,7 +39,24 @@ class Wrapper:
         return self.transform1(item), self.transform2(item)
 
 
+def select_strong_augment(experiment_name, dataset_name, augment1=None, augment2=None):
+    if experiment_name == "experiment1":
+        print("EXPERIMENT1")
+        return get_strong_transform(dataset_name)
 
+    elif experiment_name == "experiment3":
+        print("EXPERIMENT3")
+        return get_strong_transform_two_randaugment(dataset_name)
+
+    elif experiment_name == "experiment2":
+        print("EXPERIMENT2")
+        print("A1 ",augment1)
+        print("A2 ",augment2)
+        return get_sim_clr_augmentations(dataset_name, augment1, augment2)
+
+    else:
+        print("NO expperiment slected")
+        exit()
 
 def weak_augment(batch):
     #torchvision.utils.save_image(batch[0], "img_weak_1.png")
@@ -59,68 +71,70 @@ def weak_augment(batch):
 
 def get_weak_transform():
     weak_transform = torchvision.transforms.Compose([
-        #torchvision.transforms.Normalize((-0.5/0.5, -0.5/0.5, -0.5/0.5), (1/0.5, 1/0.5, 1/0.5)),
-        #torchvision.transforms.functional.to_pil_image,
         torchvision.transforms.RandomHorizontalFlip(p=0.5),
         torchvision.transforms.RandomAffine(0, translate=(0.0625, 0.0625)),
-        #torchvision.transforms.functional.to_tensor,
-        #torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     return weak_transform
 
 def strong_augment(batch, dataset_name):
-    #torchvision.utils.save_image(batch[0], "img_strog_1.png")
 
     strong_transform = get_strong_transform(dataset_name)
 
     for i in range(len(batch)):
         batch[i] = strong_transform(batch[i].cpu())
 
-        #cutout(batch[i], cutout_height, cutout_width)
-
-    #torchvision.utils.save_image(batch[0], "img_strog_aug.png")
     return batch
     
 def get_strong_transform(dataset_name):
     strong_transform = torchvision.transforms.Compose([
-        #torchvision.transforms.Normalize((-0.5 / 0.5, -0.5 / 0.5, -0.5 / 0.5), (1 / 0.5, 1 / 0.5, 1 / 0.5)),
-        #torchvision.transforms.functional.to_pil_image,
         RandAugment(),
         cutout_transform(dataset_name),
-        #torchvision.transforms.functional.to_tensor
-        #torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     return strong_transform
 
+def get_strong_transform_two_randaugment(dataset_name):
+    strong_transform = torchvision.transforms.Compose([
+        RandAugment(),
+        RandAugment(),
+        cutout_transform(dataset_name),
+        ])
+    return strong_transform
 
-def get_sim_clr_augmentations(augment1, augment2):
+def get_sim_clr_augmentations(dataset_name, augment1, augment2):
+    '''
+    Used to get simclr transformation
+    :param dataset_name:
+    :param augment1:
+    :param augment2:
+    :return:
+    '''
     if augment1 == "color":
-        a1 = colour_transform
+        a1 = colour_transform(1)
     elif augment1 == "sobel":
-        a1 = sobel_transform
+        a1 = sobel_transform()
     elif augment1 == "cutout":
-        a1 = cutout_transform
+        a1 = cutout_transform(dataset_name)
     elif augment1 == "crop":
-        a1 = crop_transform
+        a1 = crop_transform([32,32])
     else:
         print("NO VAILD a1 transform")
         exit()
 
     if augment2 == "color":
-        a2 = colour_transform
+        a2 = colour_transform(1)
     elif augment2 == "sobel":
-        a2 = sobel_transform
+        a2 = sobel_transform()
     elif augment2 == "cutout":
-        a2 = cutout_transform
+        a2 = cutout_transform(dataset_name)
     elif augment2 == "crop":
-        a2 = cutout_transform
+        a2 = crop_transform([32,32])
     else:
         print("NO VAILD a1 transform")
         exit()
 
     sim_clr_transform = torchvision.transforms.Compose([
-        a1(),
-        a2()
+        a1,
+        a2
     ])
 
     return sim_clr_transform
@@ -128,6 +142,13 @@ def get_sim_clr_augmentations(augment1, augment2):
 
 
 def SimCLR_augmentation(batch, transforms_to_do, dataset_name): #transforms_to_do = ["crop", "cutout", "colour", "sobel", "noise", "blur", "rotate"]
+    '''
+    DEPRECATED, not used anymore
+    :param batch:
+    :param transforms_to_do:
+    :param dataset_name:
+    :return:
+    '''
     torchvision.utils.save_image(batch[0], "img_SimCLR.png")
 
     for i in range(1):#range(len(batch)):
@@ -185,10 +206,6 @@ class cutout_transform(object):
             self.cutout_width = 8
 
     def __call__(self, img):
-        #img.save("cut.png")
-        #img = torchvision.transforms.functional.to_tensor(img)
-        #img_height = img.shape[1]
-        #img_width = img.shape[2]
 
         img.load()
         img_height, img_width= img.size
@@ -200,9 +217,6 @@ class cutout_transform(object):
         for x in range(cut_start_height, cut_start_height + self.cutout_height):
             for y in range(cut_start_width, cut_start_width + self.cutout_width):
                 img.putpixel((x, y), (0, 0, 0)) #PIL
-                #layer[x][y] = 0
-        #img = torchvision.transforms.functional.to_pil_image(img)
-        #img.save("cut_aug.png")
         return img
     
 
@@ -245,13 +259,6 @@ class rotate_transform(object):
         img = torchvision.transforms.functional.rotate(img = img, angle = rotate_angle)
         #img = torchvision.transforms.functional.to_tensor(img)
         return img
-"""
-def rotate_transform():
-    rotater = torchvision.transforms.Compose([
-        rotate_function
-        ])
-    return rotater
-"""
 
 #def sobel_function(img):
 class sobel_transform(object):
@@ -274,15 +281,8 @@ class sobel_transform(object):
         img = cv2.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
 
         img = np_to_tensor(img/255)
-        img = torchvision.transforms.functional.to_pil_image(img)
+        img = torchvision.transforms.functional.to_pil_image(img).convert('RGB')
         return img
-"""     
-def sobel_transform():
-    sobel_transform = torchvision.transforms.Compose([
-        sobel_function
-        ])
-    return sobel_transform
-"""
 
 #def noise_function(img):
 class noise_transform(object):
@@ -301,13 +301,7 @@ class noise_transform(object):
         img = img.type(torch.float32)
         img = torchvision.transforms.functional.to_pil_image(img)
         return img
-"""
-def noise_transform():
-    noise_transform = torchvision.transforms.Compose([
-        noise_function
-        ])
-    return noise_transform
-"""
+
 #def blur_function(img):
 class blur_transform(object):
     def __init__(self):
@@ -326,14 +320,6 @@ class blur_transform(object):
             img = np_to_tensor(img/255)
             img = torchvision.transforms.functional.to_pil_image(img)
         return img
-"""
-def blur_transform():
-    blur_transform = torchvision.transforms.Compose([
-        blur_function
-        ])
-    return blur_transform
-"""
-
 
 
 def tensor_to_np(img):

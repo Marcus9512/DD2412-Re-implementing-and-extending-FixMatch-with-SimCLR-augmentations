@@ -3,11 +3,6 @@ import PIL as p
 import torch.utils.data as ut
 import numpy as np
 
-DatasetType = {
-    'cifar10' : torchvision.datasets.CIFAR10,
-    'cifar100' : torchvision.datasets.CIFAR100
-    }
-
 '''
 These classes acts as extension to CIFAR-10 and CIFAR-100 to enable both weak and strong augmentation of the data.
 '''
