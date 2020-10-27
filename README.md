@@ -1,4 +1,4 @@
-# Recreation of FixMatch
+# Re-implementing and extending FixMatch with SimCLR augmentations
 This repository is a recreation of the FixMatch algorithm by Sohn, et al in PyTorch. The paper introducing the FixMatch
 altorithm can be found [here](https://arxiv.org/abs/2001.07685). The FixMatch algorithm is semi-supervised learning algorithm
 that exploit unlabeled samples to increase the performance. The model can be trained with two datasets, CIFAR-10 and CIFAR-100.
